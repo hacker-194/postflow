@@ -1,7 +1,10 @@
+export type Platform = 'facebook' | 'whatsapp' | 'messenger';
+
 export interface Group {
   id: string;
   name: string;
   url: string;
+  platform: Platform;
   memberCount?: number;
   isAdmin?: boolean;
   category?: string;
@@ -14,6 +17,7 @@ export interface GroupList {
   name: string;
   groupIds: string[];
   color: string;
+  platform: Platform;
   createdAt: number;
   updatedAt: number;
 }

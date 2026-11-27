@@ -31,6 +31,20 @@
       "run_at": "document_idle",
       "all_frames": false,
       "world": "ISOLATED"
+    },
+    {
+      "matches": ["*://web.whatsapp.com/*"],
+      "js": ["content-whatsapp.js"],
+      "run_at": "document_idle",
+      "all_frames": false,
+      "world": "ISOLATED"
+    },
+    {
+      "matches": ["*://www.messenger.com/*", "*://messenger.com/*"],
+      "js": ["content-messenger.js"],
+      "run_at": "document_idle",
+      "all_frames": false,
+      "world": "ISOLATED"
     }
   ],
   "options_page": "options.html",
@@ -45,19 +59,28 @@
   ],
   "host_permissions": [
     "*://*.facebook.com/*",
-    "*://*.m.facebook.com/*"
+    "*://*.m.facebook.com/*",
+    "*://web.whatsapp.com/*",
+    "*://www.messenger.com/*",
+    "*://messenger.com/*"
   ],
   "web_accessible_resources": [
     {
       "resources": ["icons/*.png"],
-      "matches": ["*://*.facebook.com/*", "*://*.m.facebook.com/*"]
+      "matches": [
+        "*://*.facebook.com/*",
+        "*://*.m.facebook.com/*",
+        "*://web.whatsapp.com/*",
+        "*://www.messenger.com/*",
+        "*://messenger.com/*"
+      ]
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; connect-src 'self' https://*.facebook.com https://*.fbcdn.net;"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; connect-src 'self' https://*.facebook.com https://*.fbcdn.net https://web.whatsapp.com https://www.messenger.com;"
   },
   "minimum_chrome_version": "88",
   "author": "Community",
   "homepage_url": "https://github.com/hacker-194/postflow",
-    "incognito": "split"
+  "incognito": "split"
 }

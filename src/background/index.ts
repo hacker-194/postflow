@@ -420,8 +420,11 @@ const VALID_MESSAGE_TYPES = [
   'GET_SHARE_PROGRESS',
   'GET_DAILY_POSTS',
   'SYNC_GROUPS',
+  'SYNC_WHATSAPP_GROUPS',
+  'SYNC_MESSENGER_GROUPS',
   'GET_ALL_GROUPS',
   'GET_GROUP_LISTS',
+  'GET_GROUPS_FOR_LIST',
   'GET_TEMPLATES',
   'GET_IMAGE_SETS',
   'GET_ALL_SCHEDULED',
@@ -437,6 +440,11 @@ const VALID_MESSAGE_TYPES = [
   'EXPORT_DATA',
   'IMPORT_DATA',
   'CLEAR_ALL_DATA',
+  'GET_WHATSAPP_GROUPS',
+  'GET_MESSENGER_GROUPS',
+  'GET_CURRENT_MESSAGE',
+  'FORWARD_WHATSAPP_MESSAGE',
+  'SHARE_MESSENGER_MESSAGE',
 ];
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -602,6 +610,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       clearAllData().then(() => sendResponse({ success: true }));
       return true;
     }
+    case 'GET_WHATSAPP_GROUPS': {
+      getAll<Group>('groups').then(groups => {
+        const waGroups = Object.values(groups).filter(g => g.platform === 'whatsapp');
+        sendResponse(waGroups.map(g => ({ id: g.id, name: g.name })));
+      });
+      return true;
+    }
+    case 'GET_MESSENGER_GROUPS': {
+      getAll<Group>('groups').then(groups => {
+        const msGroups = Object.values(groups).filter(g => g.platform === 'messenger');
+        sendResponse(msGroups.map(g => ({ id: g.id, name: g.name })));
+      });
+      return true;
+    }
+    case 'GET_CURRENT_MESSAGE': {
+      getCurrentMessage(sender.tab?.id).then(sendResponse);
+      return true;
+    }
+    case 'FORWARD_WHATSAPP_MESSAGE': {
+      forwardWhatsAppMessage(message.contactId, message.messageData).then(sendResponse);
+      return true;
+    }
+    case 'SHARE_MESSENGER_MESSAGE': {
+      shareMessengerMessage(message.groupId, message.messageData).then(sendResponse);
+      return true;
+    }
+    case 'SYNC_WHATSAPP_GROUPS': {
+      handleSyncWhatsAppGroups(sender.tab?.id).then(sendResponse);
+      return true;
+    }
+    case 'SYNC_MESSENGER_GROUPS': {
+      handleSyncMessengerGroups(sender.tab?.id).then(sendResponse);
+      return true;
+    }
   }
 });
 
@@ -710,4 +752,165 @@ function extractGroupsFromPage(): Array<{
   });
 
   return groups;
+}
+
+async function handleSyncWhatsAppGroups(
+  tabId?: number
+): Promise<{ success: boolean; groups?: any[]; error?: string }> {
+  if (!tabId) {
+    const tabs = await chrome.tabs.query({ url: '*://web.whatsapp.com/*' });
+    if (tabs[0]?.id) tabId = tabs[0].id;
+  }
+  if (!tabId) {
+    return { success: false, error: 'No WhatsApp Web tab open' };
+  }
+
+  return new Promise(resolve => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        func: extractWhatsAppGroupsFromPage,
+      },
+      results => {
+        if (chrome.runtime.lastError || !results?.[0]?.result) {
+          resolve({
+            success: false,
+            error: chrome.runtime.lastError?.message || 'Extraction failed',
+          });
+          return;
+        }
+        const groups = results[0].result;
+        saveGroups(groups, 'whatsapp').then(() => {
+          resolve({ success: true, groups });
+        });
+      }
+    );
+  });
+}
+
+async function handleSyncMessengerGroups(
+  tabId?: number
+): Promise<{ success: boolean; groups?: any[]; error?: string }> {
+  if (!tabId) {
+    const tabs = await chrome.tabs.query({ url: '*://www.messenger.com/*' });
+    if (tabs[0]?.id) tabId = tabs[0].id;
+  }
+  if (!tabId) {
+    return { success: false, error: 'No Messenger tab open' };
+  }
+
+  return new Promise(resolve => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        func: extractMessengerGroupsFromPage,
+      },
+      results => {
+        if (chrome.runtime.lastError || !results?.[0]?.result) {
+          resolve({
+            success: false,
+            error: chrome.runtime.lastError?.message || 'Extraction failed',
+          });
+          return;
+        }
+        const groups = results[0].result;
+        saveGroups(groups, 'messenger').then(() => {
+          resolve({ success: true, groups });
+        });
+      }
+    );
+  });
+}
+
+async function saveGroups(
+  groups: Array<{ id: string; name: string; url?: string }>,
+  platform: 'whatsapp' | 'messenger'
+): Promise<void> {
+  const now = Date.now();
+  for (const group of groups) {
+    const groupData = {
+      id: group.id,
+      name: group.name,
+      url: group.url || '',
+      platform,
+      addedAt: now,
+    };
+    await set('groups', groupData, group.id);
+  }
+}
+
+function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?: string }> {
+  const groups: Array<{ id: string; name: string; url?: string }> = [];
+
+  document.querySelectorAll('[role="listitem"], ._ak8l, ._ak8o').forEach(el => {
+    const nameEl = el.querySelector('[dir="auto"], ._ao3e, .x1iyjqo2') as HTMLElement;
+    const name = nameEl?.textContent?.trim();
+    if (name && name.length > 1) {
+      const id = 'wa_' + name.replace(/\s+/g, '_').toLowerCase();
+      groups.push({ id, name });
+    }
+  });
+
+  return groups;
+}
+
+function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url?: string }> {
+  const groups: Array<{ id: string; name: string; url?: string }> = [];
+
+  document.querySelectorAll('[role="listitem"], .x1yztbdb, .x1n2onr6').forEach(el => {
+    const nameEl = el.querySelector(
+      '[role="heading"], strong, .x1lliihq, [dir="auto"]'
+    ) as HTMLElement;
+    const name = nameEl?.textContent?.trim();
+    if (name && name.length > 1) {
+      const id = 'ms_' + name.replace(/\s+/g, '_').toLowerCase();
+      groups.push({ id, name });
+    }
+  });
+
+  return groups;
+}
+
+async function getCurrentMessage(
+  tabId?: number
+): Promise<{ text?: string; media?: boolean } | null> {
+  if (!tabId) return null;
+
+  return new Promise(resolve => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        func: extractCurrentMessage,
+      },
+      results => {
+        resolve(results?.[0]?.result || null);
+      }
+    );
+  });
+}
+
+function extractCurrentMessage(): { text?: string; media?: boolean } | null {
+  const selected = window.getSelection();
+  if (selected && selected.toString().trim()) {
+    return { text: selected.toString().trim() };
+  }
+  return null;
+}
+
+async function forwardWhatsAppMessage(
+  _contactId: string,
+  _messageData: { text?: string; media?: boolean }
+): Promise<{ success: boolean; error?: string }> {
+  // This would need to be implemented in the WhatsApp content script context
+  // For now, return a placeholder
+  return { success: false, error: 'WhatsApp forwarding not yet implemented in background' };
+}
+
+async function shareMessengerMessage(
+  _groupId: string,
+  _messageData: { text?: string; media?: boolean }
+): Promise<{ success: boolean; error?: string }> {
+  // This would need to be implemented in the Messenger content script context
+  // For now, return a placeholder
+  return { success: false, error: 'Messenger sharing not yet implemented in background' };
 }

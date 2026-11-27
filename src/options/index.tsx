@@ -52,11 +52,17 @@ function normalizeGroups(value: unknown): Group[] {
       return [];
     }
 
+    const platform =
+      item.platform === 'facebook' || item.platform === 'whatsapp' || item.platform === 'messenger'
+        ? item.platform
+        : 'facebook';
+
     return [
       {
         id: item.id,
         name: item.name,
         url: typeof item.url === 'string' ? item.url : '',
+        platform,
         memberCount: typeof item.memberCount === 'number' ? item.memberCount : undefined,
         isAdmin: typeof item.isAdmin === 'boolean' ? item.isAdmin : undefined,
         category: typeof item.category === 'string' ? item.category : undefined,
@@ -73,6 +79,11 @@ function normalizeGroupLists(value: unknown): GroupList[] {
       return [];
     }
 
+    const platform =
+      item.platform === 'facebook' || item.platform === 'whatsapp' || item.platform === 'messenger'
+        ? item.platform
+        : 'facebook';
+
     return [
       {
         id: item.id,
@@ -84,6 +95,7 @@ function normalizeGroupLists(value: unknown): GroupList[] {
           typeof item.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(item.color)
             ? item.color
             : COLORS[0],
+        platform,
         createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
         updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
       },
@@ -461,6 +473,7 @@ function ListsTab({
       name: newListName.trim(),
       groupIds: selectedGroupIds,
       color: newListColor,
+      platform: 'facebook' as const,
       createdAt: editingList?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
@@ -481,6 +494,7 @@ function ListsTab({
               name: '',
               groupIds: [],
               color: COLORS[0],
+              platform: 'facebook' as const,
               createdAt: Date.now(),
               updatedAt: Date.now(),
             })

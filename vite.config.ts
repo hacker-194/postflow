@@ -55,6 +55,8 @@ export default defineConfig(({ mode }) => {
           popup: resolve(__dirname, 'src/popup/index.html'),
           options: resolve(__dirname, 'src/options/index.html'),
           content: resolve(__dirname, 'src/content/index.ts'),
+          'content-whatsapp': resolve(__dirname, 'src/content/whatsapp.ts'),
+          'content-messenger': resolve(__dirname, 'src/content/messenger.ts'),
           background: resolve(__dirname, 'src/background/index.ts'),
         },
         output: {
