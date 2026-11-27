@@ -1,0 +1,713 @@
+import { logger } from '../shared/logger';
+import type {
+  ScheduledShare,
+  ShareSettings,
+  ShareProgress,
+  PostPreview,
+  ShareResult,
+  Group,
+  GroupList,
+  Template,
+  ImageSet,
+} from '../shared/types';
+import {
+  get,
+  set,
+  del,
+  getAll,
+  getUserSettings,
+  exportAllData,
+  importAllData,
+  clearNamespace,
+} from '../shared/storage';
+import {
+  DEFAULT_SHARE_SETTINGS,
+  DEFAULT_USER_SETTINGS,
+  SAFETY_LEVEL_DELAYS,
+} from '../shared/types';
+import {
+  sanitizeSettings,
+  sanitizeGroupList,
+  sanitizeTemplate,
+  sanitizeImageSet,
+  validateShareId,
+  validateGroupListId,
+  validateTemplateId,
+  validateImageSetId,
+  generateSecureId,
+  sanitizeGroupName,
+  sanitizeUrl,
+} from '../shared/security';
+
+const ALARM_NAME = 'fgp-scheduler';
+
+logger.info('background', 'Service worker started');
+
+chrome.runtime.onInstalled.addListener(async details => {
+  logger.info('background', 'Installed', { reason: details.reason });
+  if (details.reason === 'install') {
+    await initializeDefaults();
+    chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+  }
+  await setupAlarms();
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  logger.info('background', 'Browser startup');
+  await setupAlarms();
+  await processScheduledShares();
+});
+
+async function initializeDefaults(): Promise<void> {
+  const settings = await getUserSettings();
+  if (!settings) {
+    await set('userSettings', DEFAULT_USER_SETTINGS);
+  }
+  await set('dailyPosts', 0);
+  await set('dailyPostsDate', new Date().toISOString().split('T')[0]);
+}
+
+async function setupAlarms(): Promise<void> {
+  await chrome.alarms.clear(ALARM_NAME);
+  await chrome.alarms.create(ALARM_NAME, { periodInMinutes: 1 });
+}
+
+chrome.alarms.onAlarm.addListener(async alarm => {
+  if (alarm.name === ALARM_NAME) {
+    await processScheduledShares();
+    await resetDailyCounterIfNeeded();
+  }
+});
+
+async function resetDailyCounterIfNeeded(): Promise<void> {
+  const today = new Date().toISOString().split('T')[0];
+  const storedDate = await get<string>('dailyPostsDate');
+  if (storedDate !== today) {
+    await set('dailyPosts', 0);
+    await set('dailyPostsDate', today);
+  }
+}
+
+async function processScheduledShares(): Promise<void> {
+  const now = Date.now();
+  const scheduled = await getAll<ScheduledShare>('scheduledShares');
+  const pending = Object.values(scheduled).filter(
+    s => s.status === 'pending' && s.scheduledAt <= now
+  );
+
+  for (const share of pending) {
+    await executeShare(share.id);
+  }
+}
+
+async function executeShare(shareId: string): Promise<void> {
+  const share = await get<ScheduledShare>('scheduledShares', shareId);
+  if (!share || share.status !== 'pending') return;
+
+  await set(
+    'scheduledShares',
+    { ...share, status: 'running', progress: createInitialProgress(share) },
+    shareId
+  );
+
+  try {
+    const groups = await getGroupsForList(share.groupListId);
+    const settings = share.settings;
+
+    let dailyPosts = (await get<number>('dailyPosts')) || 0;
+    const maxPerDay = settings.maxPostsPerDay || DEFAULT_SHARE_SETTINGS.maxPostsPerDay;
+
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      if (!group) continue;
+
+      if (dailyPosts >= maxPerDay) {
+        await updateProgress(shareId, {
+          errors: [
+            ...(share.progress?.errors || []),
+            {
+              groupId: group.id,
+              groupName: group.name,
+              error: 'Daily post limit reached',
+              timestamp: Date.now(),
+              retryable: false,
+            },
+          ],
+        });
+        break;
+      }
+
+      if (await isOvernightPause(settings)) {
+        await waitForOvernightPauseEnd(settings);
+      }
+
+      await updateProgress(shareId, { currentGroupId: group.id, currentGroupName: group.name });
+
+      try {
+        await shareToGroup(share.postUrl, group, settings, share.postPreview);
+        dailyPosts++;
+        await set('dailyPosts', dailyPosts);
+        await updateProgress(shareId, {
+          completedGroups: (share.progress?.completedGroups || 0) + 1,
+          successfulGroups: (share.progress?.successfulGroups || 0) + 1,
+        });
+      } catch (error) {
+        if (!group) return;
+        await updateProgress(shareId, {
+          completedGroups: (share.progress?.completedGroups || 0) + 1,
+          failedGroups: (share.progress?.failedGroups || 0) + 1,
+          errors: [
+            ...(share.progress?.errors || []),
+            {
+              groupId: group.id,
+              groupName: group.name,
+              error: error instanceof Error ? error.message : 'Unknown error',
+              timestamp: Date.now(),
+              retryable: true,
+            },
+          ],
+        });
+      }
+
+      if (i < groups.length - 1) {
+        const delay = calculateDelay(settings);
+        await sleep(delay);
+      }
+    }
+
+    await set(
+      'scheduledShares',
+      {
+        ...share,
+        status: 'completed',
+        completedAt: Date.now(),
+      },
+      shareId
+    );
+
+    await notifyUser(shareId, 'completed', groups.length);
+  } catch {
+    await set(
+      'scheduledShares',
+      {
+        ...share,
+        status: 'failed',
+      },
+      shareId
+    );
+    await notifyUser(shareId, 'failed', 0);
+  }
+}
+
+function createInitialProgress(share: ScheduledShare): ShareProgress {
+  return {
+    totalGroups: share.progress?.totalGroups || 0,
+    completedGroups: share.progress?.completedGroups || 0,
+    successfulGroups: share.progress?.successfulGroups || 0,
+    failedGroups: share.progress?.failedGroups || 0,
+    currentGroupId: share.progress?.currentGroupId,
+    currentGroupName: share.progress?.currentGroupName,
+    errors: share.progress?.errors || [],
+    startedAt: share.progress?.startedAt || Date.now(),
+    estimatedCompletionAt: share.progress?.estimatedCompletionAt,
+  };
+}
+
+async function updateProgress(shareId: string, updates: Partial<ShareProgress>): Promise<void> {
+  const share = await get<ScheduledShare>('scheduledShares', shareId);
+  if (share && share.progress) {
+    const newProgress: ShareProgress = { ...share.progress, ...updates };
+    await set(
+      'scheduledShares',
+      {
+        ...share,
+        progress: newProgress,
+      },
+      shareId
+    );
+    broadcastProgress(shareId, newProgress);
+  }
+}
+
+function broadcastProgress(shareId: string, progress: ShareProgress): void {
+  chrome.runtime.sendMessage({ type: 'SHARE_PROGRESS', shareId, progress });
+}
+
+async function getGroupsForList(listId: string): Promise<Array<{ id: string; name: string }>> {
+  const list = await get<GroupList>('groupLists', listId);
+  if (!list) return [];
+  const groups = await getAll<Group>('groups');
+  return list.groupIds
+    .map(id => groups[id])
+    .filter((g): g is Group => !!g)
+    .map(g => ({ id: g.id, name: g.name }));
+}
+
+async function shareToGroup(
+  postUrl: string,
+  group: { id: string; name: string },
+  settings: ShareSettings,
+  preview: PostPreview
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.query({ url: '*://*.facebook.com/*' }, tabs => {
+      const tab = tabs.find(t => t.url?.includes('facebook.com'));
+      if (!tab || !tab.id) {
+        reject(new Error('No Facebook tab found'));
+        return;
+      }
+
+      chrome.scripting.executeScript(
+        {
+          target: { tabId: tab.id },
+          func: performShare,
+          args: [postUrl, group.id, settings, preview],
+        },
+        results => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          const result = results?.[0]?.result;
+          if (result?.success) {
+            resolve();
+          } else {
+            reject(new Error(result?.error || 'Share failed'));
+          }
+        }
+      );
+    });
+  });
+}
+
+async function performShare(
+  postUrl: string,
+  groupId: string,
+  settings: ShareSettings,
+  _preview: PostPreview
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const shareButton = document.querySelector('[data-testid="share-button"]') as HTMLElement;
+    if (!shareButton) {
+      return { success: false, error: 'Share button not found' };
+    }
+
+    shareButton.click();
+
+    await new Promise(r => setTimeout(r, 1000));
+
+    const shareDialog = Array.from(document.querySelectorAll('[role="dialog"]')).find(
+      el => el.textContent?.includes('Share') || el.textContent?.includes('share')
+    ) as HTMLElement;
+    if (!shareDialog) {
+      return { success: false, error: 'Share dialog not opened' };
+    }
+
+    const groupInput = shareDialog.querySelector(
+      'input[placeholder*="group" i], input[aria-label*="group" i]'
+    ) as HTMLInputElement;
+    if (groupInput) {
+      groupInput.value = groupId;
+      groupInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    if (settings.caption) {
+      const captionInput = shareDialog.querySelector(
+        'textarea[placeholder*="say" i], [contenteditable="true"]'
+      ) as HTMLElement;
+      if (captionInput) {
+        captionInput.textContent = settings.caption;
+        captionInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    const postButton = Array.from(shareDialog.querySelectorAll('[role="button"]')).find(
+      el => el.textContent?.includes('Post') || el.textContent?.includes('Share')
+    ) as HTMLElement;
+    if (postButton) {
+      postButton.click();
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+function calculateDelay(settings: ShareSettings): number {
+  const baseDelay = settings.delayBetweenGroups || DEFAULT_SHARE_SETTINGS.delayBetweenGroups;
+  const range = SAFETY_LEVEL_DELAYS[settings.safetyLevel || 'balanced'];
+  const jitter = Math.random() * (range.max - range.min) + range.min;
+  return baseDelay + jitter;
+}
+
+async function isOvernightPause(settings: ShareSettings): Promise<boolean> {
+  if (!settings.overnightPause || !settings.overnightStart || !settings.overnightEnd) return false;
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const startMinutes = parseTimeStr(settings.overnightStart);
+  const endMinutes = parseTimeStr(settings.overnightEnd);
+  if (startMinutes === null || endMinutes === null) return false;
+
+  if (startMinutes < endMinutes) {
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  } else {
+    // Overnight span (e.g., 22:00-07:00)
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  }
+}
+
+function parseTimeStr(timeStr: string): number | null {
+  const parts = timeStr.split(':');
+  if (parts.length !== 2) return null;
+  const h = parseInt(parts[0]!, 10);
+  const m = parseInt(parts[1]!, 10);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+}
+
+async function waitForOvernightPauseEnd(settings: ShareSettings): Promise<void> {
+  if (!settings.overnightEnd) return;
+  const endMinutes = parseTimeStr(settings.overnightEnd);
+  if (endMinutes === null) return;
+  const now = new Date();
+  const endHour = Math.floor(endMinutes / 60);
+  const endMin = endMinutes % 60;
+  const endTime = new Date();
+  endTime.setHours(endHour, endMin, 0, 0);
+  if (endTime <= now) endTime.setDate(endTime.getDate() + 1);
+  const waitMs = endTime.getTime() - now.getTime();
+  await sleep(waitMs);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function notifyUser(
+  shareId: string,
+  status: 'completed' | 'failed',
+  totalGroups: number
+): Promise<void> {
+  const userSettings = await getUserSettings();
+  const title = status === 'completed' ? 'Share Completed' : 'Share Failed';
+  const message =
+    status === 'completed'
+      ? `Successfully shared to ${totalGroups} groups`
+      : `Failed to share. Check extension for details.`;
+
+  if (userSettings.desktopNotifications) {
+    chrome.notifications.create(`fgp-${shareId}`, {
+      type: 'basic',
+      iconUrl: 'icons/icon128.png',
+      title,
+      message,
+      priority: 2,
+    });
+  }
+
+  if (userSettings.soundNotifications) {
+    chrome.runtime.sendMessage({ type: 'PLAY_SOUND', sound: status });
+  }
+}
+
+const VALID_MESSAGE_TYPES = [
+  'SCHEDULE_SHARE',
+  'CANCEL_SHARE',
+  'GET_SHARE_PROGRESS',
+  'GET_DAILY_POSTS',
+  'SYNC_GROUPS',
+  'GET_ALL_GROUPS',
+  'GET_GROUP_LISTS',
+  'GET_TEMPLATES',
+  'GET_IMAGE_SETS',
+  'GET_ALL_SCHEDULED',
+  'GET_SHARE_HISTORY',
+  'GET_USER_SETTINGS',
+  'UPDATE_USER_SETTINGS',
+  'SAVE_GROUP_LIST',
+  'DELETE_GROUP_LIST',
+  'SAVE_TEMPLATE',
+  'DELETE_TEMPLATE',
+  'SAVE_IMAGE_SET',
+  'DELETE_IMAGE_SET',
+  'EXPORT_DATA',
+  'IMPORT_DATA',
+  'CLEAR_ALL_DATA',
+];
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || !message.type || !VALID_MESSAGE_TYPES.includes(message.type)) {
+    sendResponse({ success: false, error: 'Invalid or unknown message type' });
+    return true;
+  }
+
+  if (sender.id !== chrome.runtime.id) {
+    sendResponse({ success: false, error: 'Unauthorized sender' });
+    return true;
+  }
+
+  switch (message.type) {
+    case 'SCHEDULE_SHARE': {
+      handleScheduleShare(message.payload).then(sendResponse);
+      return true;
+    }
+    case 'CANCEL_SHARE': {
+      if (!validateShareId(message.shareId)) {
+        sendResponse({ success: false, error: 'Invalid share ID' });
+        return true;
+      }
+      handleCancelShare(message.shareId).then(sendResponse);
+      return true;
+    }
+    case 'GET_SHARE_PROGRESS': {
+      if (!validateShareId(message.shareId)) {
+        sendResponse({ success: false, error: 'Invalid share ID' });
+        return true;
+      }
+      get<ScheduledShare>('scheduledShares', message.shareId).then(sendResponse);
+      return true;
+    }
+    case 'GET_DAILY_POSTS': {
+      get<number>('dailyPosts').then(sendResponse);
+      return true;
+    }
+    case 'SYNC_GROUPS': {
+      handleSyncGroups(sender.tab?.id).then(sendResponse);
+      return true;
+    }
+    case 'GET_ALL_GROUPS': {
+      getAll<Group>('groups').then(sendResponse);
+      return true;
+    }
+    case 'GET_GROUP_LISTS': {
+      getAll<GroupList>('groupLists').then(sendResponse);
+      return true;
+    }
+    case 'GET_GROUPS_FOR_LIST': {
+      get<GroupList>('groupLists', message.listId).then(list => {
+        if (!list) return sendResponse([]);
+        getAll<Group>('groups').then(groups => {
+          const result = list.groupIds.map(id => groups[id]).filter(Boolean);
+          sendResponse(result);
+        });
+      });
+      return true;
+    }
+    case 'GET_TEMPLATES': {
+      getAll<Template>('templates').then(sendResponse);
+      return true;
+    }
+    case 'GET_IMAGE_SETS': {
+      getAll<ImageSet>('imageSets').then(sendResponse);
+      return true;
+    }
+    case 'GET_ALL_SCHEDULED': {
+      getAll<ScheduledShare>('scheduledShares').then(sendResponse);
+      return true;
+    }
+    case 'GET_SHARE_HISTORY': {
+      getAll<ShareResult>('shareHistory').then(sendResponse);
+      return true;
+    }
+    case 'GET_USER_SETTINGS': {
+      getUserSettings().then(sendResponse);
+      return true;
+    }
+    case 'UPDATE_USER_SETTINGS': {
+      getUserSettings()
+        .then(current => {
+          const sanitized = sanitizeSettings(message.settings);
+          set('userSettings', { ...current, ...sanitized });
+        })
+        .then(() => sendResponse({ success: true }));
+      return true;
+    }
+    case 'SAVE_GROUP_LIST': {
+      if (!message.list || !validateGroupListId(message.list.id)) {
+        sendResponse({ success: false, error: 'Invalid group list' });
+        return true;
+      }
+      const sanitized = sanitizeGroupList(message.list);
+      set('groupLists', sanitized, sanitized.id).then(() => sendResponse({ success: true }));
+      return true;
+    }
+    case 'DELETE_GROUP_LIST': {
+      if (!validateGroupListId(message.id)) {
+        sendResponse({ success: false, error: 'Invalid group list ID' });
+        return true;
+      }
+      del('groupLists', message.id).then(() => sendResponse({ success: true }));
+      return true;
+    }
+    case 'SAVE_TEMPLATE': {
+      if (!message.template || !validateTemplateId(message.template.id)) {
+        sendResponse({ success: false, error: 'Invalid template' });
+        return true;
+      }
+      const sanitized = sanitizeTemplate(message.template);
+      set('templates', sanitized, sanitized.id).then(() => sendResponse({ success: true }));
+      return true;
+    }
+    case 'DELETE_TEMPLATE': {
+      if (!validateTemplateId(message.id)) {
+        sendResponse({ success: false, error: 'Invalid template ID' });
+        return true;
+      }
+      del('templates', message.id).then(() => sendResponse({ success: true }));
+      return true;
+    }
+    case 'SAVE_IMAGE_SET': {
+      if (!message.imageSet || !validateImageSetId(message.imageSet.id)) {
+        sendResponse({ success: false, error: 'Invalid image set' });
+        return true;
+      }
+      const sanitized = sanitizeImageSet(message.imageSet);
+      set('imageSets', sanitized, sanitized.id).then(() => sendResponse({ success: true }));
+      return true;
+    }
+    case 'DELETE_IMAGE_SET': {
+      if (!validateImageSetId(message.id)) {
+        sendResponse({ success: false, error: 'Invalid image set ID' });
+        return true;
+      }
+      del('imageSets', message.id).then(() => sendResponse({ success: true }));
+      return true;
+    }
+    case 'EXPORT_DATA': {
+      exportAllData().then(sendResponse);
+      return true;
+    }
+    case 'IMPORT_DATA': {
+      if (!message.data || typeof message.data !== 'string') {
+        sendResponse({ success: false, error: 'Invalid import data' });
+        return true;
+      }
+      try {
+        JSON.parse(message.data);
+      } catch {
+        sendResponse({ success: false, error: 'Invalid JSON data' });
+        return true;
+      }
+
+      importAllData(message.data)
+        .then(() => sendResponse({ success: true }))
+        .catch(() => sendResponse({ success: false, error: 'Invalid backup data' }));
+      return true;
+    }
+    case 'CLEAR_ALL_DATA': {
+      clearAllData().then(() => sendResponse({ success: true }));
+      return true;
+    }
+  }
+});
+
+async function clearAllData(): Promise<void> {
+  const namespaces = [
+    'groups',
+    'groupLists',
+    'scheduledShares',
+    'shareHistory',
+    'imageSets',
+    'templates',
+    'userSettings',
+  ];
+  for (const ns of namespaces) {
+    await clearNamespace(ns);
+  }
+  // Re-initialize defaults
+  await set('userSettings', DEFAULT_USER_SETTINGS);
+  await set('dailyPosts', 0);
+  await set('dailyPostsDate', new Date().toISOString().split('T')[0]);
+}
+
+async function handleScheduleShare(payload: {
+  postUrl: string;
+  postPreview: PostPreview;
+  groupListId: string;
+  settings: ShareSettings;
+  scheduledAt: number;
+}): Promise<{ success: boolean; shareId?: string; error?: string }> {
+  const settings = sanitizeSettings(payload.settings);
+  const shareId = generateSecureId('share');
+  const share: ScheduledShare = {
+    id: shareId,
+    postUrl: sanitizeUrl(payload.postUrl) || payload.postUrl,
+    postPreview: payload.postPreview,
+    groupListId: sanitizeGroupName(payload.groupListId),
+    settings,
+    scheduledAt: payload.scheduledAt,
+    createdAt: Date.now(),
+    status: 'pending',
+  };
+  await set('scheduledShares', share, shareId);
+  return { success: true, shareId };
+}
+
+async function handleCancelShare(shareId: string): Promise<{ success: boolean }> {
+  const share = await get<ScheduledShare>('scheduledShares', shareId);
+  if (share && share.status === 'pending') {
+    await set('scheduledShares', { ...share, status: 'cancelled' }, shareId);
+    return { success: true };
+  }
+  return { success: false };
+}
+
+async function handleSyncGroups(
+  tabId?: number
+): Promise<{ success: boolean; groups?: any[]; error?: string }> {
+  if (!tabId) {
+    const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+    if (tabs[0]?.id) tabId = tabs[0].id;
+  }
+  if (!tabId) {
+    return { success: false, error: 'No Facebook tab open' };
+  }
+
+  return new Promise(resolve => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        func: extractGroupsFromPage,
+      },
+      results => {
+        if (chrome.runtime.lastError || !results?.[0]?.result) {
+          resolve({
+            success: false,
+            error: chrome.runtime.lastError?.message || 'Extraction failed',
+          });
+          return;
+        }
+        resolve({ success: true, groups: results[0].result });
+      }
+    );
+  });
+}
+
+function extractGroupsFromPage(): Array<{
+  id: string;
+  name: string;
+  url: string;
+  memberCount?: number;
+}> {
+  const groups: Array<{ id: string; name: string; url: string; memberCount?: number }> = [];
+
+  document.querySelectorAll('[role="listitem"], .x1yztbdb, .x1n2onr6').forEach(el => {
+    const link = el.querySelector('a[href*="/groups/"]') as HTMLAnchorElement;
+    if (link) {
+      const nameEl = el.querySelector('[role="heading"], strong, .x1lliihq');
+      const name = nameEl?.textContent?.trim();
+      const url = link.href;
+      const idMatch = url.match(/groups\/(\d+)/) || url.match(/groups\/([^\/?]+)/);
+      const id = idMatch?.[1] || url;
+      if (name && name.length > 1) {
+        groups.push({ id, name, url });
+      }
+    }
+  });
+
+  return groups;
+}
