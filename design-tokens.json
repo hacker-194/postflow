@@ -1,0 +1,170 @@
+{
+  "color": {
+    "primary": {
+      "value": "#1877f2",
+      "name": "Primary Blue",
+      "description": "Facebook blue - primary brand color"
+    },
+    "primaryHover": {
+      "value": "#0d65d9",
+      "name": "Primary Hover",
+      "description": "Darker blue for hover states"
+    },
+    "success": {
+      "value": "#42b72a",
+      "name": "Success Green",
+      "description": "Completed actions, positive states"
+    },
+    "warning": {
+      "value": "#f77f00",
+      "name": "Warning Orange",
+      "description": "Pending/scheduled states, cautions"
+    },
+    "danger": {
+      "value": "#e63946",
+      "name": "Danger Red",
+      "description": "Errors, destructive actions"
+    },
+    "background": {
+      "light": "#f0f2f5",
+      "dark": "#18191a",
+      "name": "Background",
+      "description": "Page background"
+    },
+    "surface": {
+      "light": "#ffffff",
+      "dark": "#242526",
+      "name": "Surface",
+      "description": "Card/panel backgrounds"
+    },
+    "border": {
+      "light": "#e4e6eb",
+      "dark": "#3a3b3c",
+      "name": "Border",
+      "description": "Dividers, input borders"
+    },
+    "text": {
+      "light": "#050505",
+      "dark": "#e4e6eb",
+      "name": "Primary Text",
+      "description": "Main text content"
+    },
+    "textSecondary": {
+      "light": "#65676b",
+      "dark": "#b0b3b8",
+      "name": "Secondary Text",
+      "description": "Muted text, labels, placeholders"
+    },
+    "overlay": {
+      "value": "rgba(0, 0, 0, 0.5)",
+      "name": "Modal Overlay",
+      "description": "Share sheet backdrop"
+    },
+    "shadow": {
+      "light": "0 2px 8px rgba(0, 0, 0, 0.08)",
+      "dark": "0 2px 8px rgba(0, 0, 0, 0.3)",
+      "name": "Shadow",
+      "description": "Elevation for cards, modals"
+    },
+    "focusRing": {
+      "value": "0 0 0 3px #e7f3ff",
+      "name": "Focus Ring",
+      "description": "Accessible focus indicator"
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "value": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif",
+      "name": "System Font Stack",
+      "description": "Native system fonts for performance"
+    },
+    "scale": {
+      "xs": { "size": "11px", "weight": "600", "letterSpacing": "0.5px", "textTransform": "uppercase" },
+      "sm": { "size": "12px", "weight": "500" },
+      "base": { "size": "13px", "weight": "400" },
+      "md": { "size": "14px", "weight": "400" },
+      "lg": { "size": "15px", "weight": "600" },
+      "xl": { "size": "16px", "weight": "700" },
+      "h2": { "size": "20px", "weight": "600" },
+      "h1": { "size": "22px", "weight": "700" }
+    },
+    "lineHeight": {
+      "tight": "1.2",
+      "normal": "1.5",
+      "relaxed": "1.8"
+    }
+  },
+  "spacing": {
+    "base": "4px",
+    "scale": {
+      "1": "4px",
+      "2": "8px",
+      "3": "12px",
+      "4": "16px",
+      "5": "20px",
+      "6": "24px",
+      "8": "32px"
+    }
+  },
+  "borderRadius": {
+    "sm": "6px",
+    "md": "8px",
+    "lg": "10px",
+    "xl": "12px",
+    "pill": "12px",
+    "circle": "50%"
+  },
+  "transition": {
+    "fast": "all 0.15s ease",
+    "normal": "all 0.2s ease",
+    "slow": "all 0.3s ease"
+  },
+  "zIndex": {
+    "dropdown": 100,
+    "modal": 1000,
+    "toast": 2147483647,
+    "sheet": 2147483647
+  },
+  "breakpoints": {
+    "popupMin": "380px",
+    "popupMax": "420px",
+    "optionsMin": "800px"
+  },
+  "componentTokens": {
+    "button": {
+      "padding": "10px 18px",
+      "paddingSm": "6px 12px",
+      "iconSize": "36px",
+      "iconSizeSm": "32px",
+      "fontSize": "13px",
+      "fontSizeSm": "12px",
+      "fontWeight": "600",
+      "borderRadius": "10px",
+      "transition": "all 0.2s ease"
+    },
+    "input": {
+      "padding": "12px 14px",
+      "fontSize": "14px",
+      "borderWidth": "2px",
+      "borderRadius": "8px",
+      "focusRing": "0 0 0 3px #e7f3ff"
+    },
+    "card": {
+      "borderRadius": "12px",
+      "borderWidth": "1px",
+      "hoverShadow": "0 2px 8px rgba(0, 0, 0, 0.08)",
+      "hoverTransform": "translateY(-2px)"
+    },
+    "tag": {
+      "padding": "4px 10px",
+      "borderRadius": "12px",
+      "fontSize": "12px"
+    },
+    "statCard": {
+      "iconSize": "44px",
+      "iconRadius": "12px",
+      "valueSize": "22px",
+      "labelSize": "11px"
+    }
+  }
+}

@@ -52,16 +52,18 @@ function normalizeGroups(value: unknown): Group[] {
       return [];
     }
 
-    return [{
-      id: item.id,
-      name: item.name,
-      url: typeof item.url === 'string' ? item.url : '',
-      memberCount: typeof item.memberCount === 'number' ? item.memberCount : undefined,
-      isAdmin: typeof item.isAdmin === 'boolean' ? item.isAdmin : undefined,
-      category: typeof item.category === 'string' ? item.category : undefined,
-      addedAt: typeof item.addedAt === 'number' ? item.addedAt : Date.now(),
-      lastPostedAt: typeof item.lastPostedAt === 'number' ? item.lastPostedAt : undefined,
-    }];
+    return [
+      {
+        id: item.id,
+        name: item.name,
+        url: typeof item.url === 'string' ? item.url : '',
+        memberCount: typeof item.memberCount === 'number' ? item.memberCount : undefined,
+        isAdmin: typeof item.isAdmin === 'boolean' ? item.isAdmin : undefined,
+        category: typeof item.category === 'string' ? item.category : undefined,
+        addedAt: typeof item.addedAt === 'number' ? item.addedAt : Date.now(),
+        lastPostedAt: typeof item.lastPostedAt === 'number' ? item.lastPostedAt : undefined,
+      },
+    ];
   });
 }
 
@@ -71,19 +73,21 @@ function normalizeGroupLists(value: unknown): GroupList[] {
       return [];
     }
 
-    return [{
-      id: item.id,
-      name: item.name,
-      groupIds: Array.isArray(item.groupIds)
-        ? item.groupIds.filter((id): id is string => typeof id === 'string')
-        : [],
-      color:
-        typeof item.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(item.color)
-          ? item.color
-          : COLORS[0],
-      createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-      updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
-    }];
+    return [
+      {
+        id: item.id,
+        name: item.name,
+        groupIds: Array.isArray(item.groupIds)
+          ? item.groupIds.filter((id): id is string => typeof id === 'string')
+          : [],
+        color:
+          typeof item.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(item.color)
+            ? item.color
+            : COLORS[0],
+        createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
+        updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
+      },
+    ];
   });
 }
 
@@ -93,15 +97,17 @@ function normalizeTemplates(value: unknown): Template[] {
       return [];
     }
 
-    return [{
-      id: item.id,
-      name: item.name,
-      caption: typeof item.caption === 'string' ? item.caption : '',
-      firstComment: typeof item.firstComment === 'string' ? item.firstComment : undefined,
-      settings: isRecord(item.settings) ? (item.settings as Template['settings']) : {},
-      createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-      updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
-    }];
+    return [
+      {
+        id: item.id,
+        name: item.name,
+        caption: typeof item.caption === 'string' ? item.caption : '',
+        firstComment: typeof item.firstComment === 'string' ? item.firstComment : undefined,
+        settings: isRecord(item.settings) ? (item.settings as Template['settings']) : {},
+        createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
+        updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
+      },
+    ];
   });
 }
 
@@ -111,14 +117,16 @@ function normalizeImageSets(value: unknown): ImageSet[] {
       return [];
     }
 
-    return [{
-      id: item.id,
-      name: item.name,
-      imageUrls: Array.isArray(item.imageUrls)
-        ? item.imageUrls.filter((url): url is string => typeof url === 'string')
-        : [],
-      createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-    }];
+    return [
+      {
+        id: item.id,
+        name: item.name,
+        imageUrls: Array.isArray(item.imageUrls)
+          ? item.imageUrls.filter((url): url is string => typeof url === 'string')
+          : [],
+        createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
+      },
+    ];
   });
 }
 
@@ -465,7 +473,19 @@ function ListsTab({
     <div className="fgp-tab-panel">
       <div className="fgp-panel-header">
         <h2>Group Lists</h2>
-        <button className="fgp-btn fgp-btn-primary" onClick={() => setEditingList(undefined)}>
+        <button
+          className="fgp-btn fgp-btn-primary"
+          onClick={() =>
+            setEditingList({
+              id: `list_${Date.now()}`,
+              name: '',
+              groupIds: [],
+              color: COLORS[0],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            })
+          }
+        >
           <Plus size={18} /> New List
         </button>
       </div>
@@ -808,7 +828,20 @@ function TemplatesTab({
     <div className="fgp-tab-panel">
       <div className="fgp-panel-header">
         <h2>Post Templates</h2>
-        <button className="fgp-btn fgp-btn-primary" onClick={() => setEditingTemplate(undefined)}>
+        <button
+          className="fgp-btn fgp-btn-primary"
+          onClick={() =>
+            setEditingTemplate({
+              id: `template_${Date.now()}`,
+              name: '',
+              caption: '',
+              firstComment: '',
+              settings: { mode: 'share_original' },
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            })
+          }
+        >
           <Plus size={18} /> New Template
         </button>
       </div>
@@ -960,7 +993,17 @@ function ImagesTab({
     <div className="fgp-tab-panel">
       <div className="fgp-panel-header">
         <h2>Image Sets</h2>
-        <button className="fgp-btn fgp-btn-primary" onClick={() => setEditingImageSet(undefined)}>
+        <button
+          className="fgp-btn fgp-btn-primary"
+          onClick={() =>
+            setEditingImageSet({
+              id: `images_${Date.now()}`,
+              name: '',
+              imageUrls: [],
+              createdAt: Date.now(),
+            })
+          }
+        >
           <Plus size={18} /> New Image Set
         </button>
       </div>

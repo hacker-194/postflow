@@ -485,8 +485,12 @@ function App() {
       setState(s => ({
         ...s,
         groupLists: groupLists || [],
-        scheduledShares: scheduledShares || [],
-        shareHistory: shareHistory || [],
+        scheduledShares: isScheduledShareArray(scheduledShares)
+          ? scheduledShares
+          : Object.values(scheduledShares || {}),
+        shareHistory: Array.isArray(shareHistory)
+          ? shareHistory
+          : Object.values(shareHistory || {}),
         userSettings: userSettings || s.userSettings,
         dailyPosts: dailyPosts || 0,
         loading: false,
