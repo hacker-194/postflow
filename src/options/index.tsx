@@ -425,6 +425,7 @@ function App() {
             setSearchQuery={setSearchQuery}
             syncing={syncing}
             onSync={syncGroupsFromFacebook}
+            loadAllData={loadAllData}
           />
         )}
         {activeTab === 'templates' && (
@@ -731,6 +732,7 @@ interface GroupsTabProps {
   setSearchQuery: (query: string) => void;
   syncing: boolean;
   onSync: () => void;
+  loadAllData: () => void;
 }
 
 function GroupsTab({
@@ -740,8 +742,10 @@ function GroupsTab({
   setSearchQuery,
   syncing,
   onSync,
+  loadAllData,
 }: GroupsTabProps) {
   const [syncPlatform, setSyncPlatform] = useState<Group['platform']>('facebook');
+  const [lastSyncResult, setLastSyncResult] = useState<string | null>(null);
 
   const handleSync = async () => {
     if (syncPlatform === 'facebook') {
@@ -751,13 +755,13 @@ function GroupsTab({
       try {
         const result = await chrome.runtime.sendMessage({ type: 'SYNC_WHATSAPP_GROUPS' });
         if (result.success && result.groups) {
-          alert(`Found ${result.groups.length} WhatsApp groups!`);
+          setLastSyncResult(`✅ Found ${result.groups.length} WhatsApp groups`);
           loadAllData();
         } else {
-          alert("Failed to sync WhatsApp groups. Make sure you're on web.whatsapp.com.");
+          setLastSyncResult(`❌ ${result.error || 'Failed to sync'}`);
         }
       } catch (error) {
-        alert('Sync failed: ' + error);
+        setLastSyncResult(`❌ ${error}`);
       }
       setSyncing(false);
     } else if (syncPlatform === 'messenger') {
@@ -765,15 +769,46 @@ function GroupsTab({
       try {
         const result = await chrome.runtime.sendMessage({ type: 'SYNC_MESSENGER_GROUPS' });
         if (result.success && result.groups) {
-          alert(`Found ${result.groups.length} Messenger groups!`);
+          setLastSyncResult(`✅ Found ${result.groups.length} Messenger groups`);
           loadAllData();
         } else {
-          alert("Failed to sync Messenger groups. Make sure you're on messenger.com.");
+          setLastSyncResult(`❌ ${result.error || 'Failed to sync'}`);
         }
       } catch (error) {
-        alert('Sync failed: ' + error);
+        setLastSyncResult(`❌ ${error}`);
       }
       setSyncing(false);
+    }
+  };
+
+  const openAndSync = async (url: string) => {
+    setSyncing(true);
+    try {
+      await chrome.tabs.create({ url, active: true });
+      // Wait a bit for page to load, then sync
+      setTimeout(async () => {
+        try {
+          const result = await chrome.runtime.sendMessage(
+            syncPlatform === 'whatsapp'
+              ? { type: 'SYNC_WHATSAPP_GROUPS' }
+              : { type: 'SYNC_MESSENGER_GROUPS' }
+          );
+          if (result.success && result.groups) {
+            setLastSyncResult(
+              `✅ Found ${result.groups.length} ${syncPlatform === 'whatsapp' ? 'WhatsApp' : 'Messenger'} groups`
+            );
+            loadAllData();
+          } else {
+            setLastSyncResult(`❌ ${result.error || 'Failed - make sure page loaded fully'}`);
+          }
+        } catch (error) {
+          setLastSyncResult(`❌ ${error}`);
+        }
+        setSyncing(false);
+      }, 3000);
+    } catch (error) {
+      setSyncing(false);
+      setLastSyncResult(`❌ ${error}`);
     }
   };
 
@@ -792,31 +827,63 @@ function GroupsTab({
             <option value="whatsapp">WhatsApp Groups</option>
             <option value="messenger">Messenger Groups</option>
           </select>
-          <button className="fgp-btn fgp-btn-primary" onClick={handleSync} disabled={syncing}>
-            {syncing ? (
-              <>
-                <div className="fgp-spinner" /> Syncing...
-              </>
-            ) : (
-              <>
-                <Users size={18} /> Sync{' '}
-                {syncPlatform === 'facebook'
-                  ? 'Facebook'
-                  : syncPlatform === 'whatsapp'
-                    ? 'WhatsApp'
-                    : 'Messenger'}{' '}
-                Groups
-              </>
-            )}
-          </button>
+          {syncPlatform === 'facebook' ? (
+            <button className="fgp-btn fgp-btn-primary" onClick={handleSync} disabled={syncing}>
+              {syncing ? (
+                <>
+                  <div className="fgp-spinner" /> Syncing...
+                </>
+              ) : (
+                <>
+                  <Users size={18} /> Sync Facebook Groups
+                </>
+              )}
+            </button>
+          ) : (
+            <>
+              <button
+                className="fgp-btn fgp-btn-secondary"
+                onClick={() =>
+                  openAndSync(
+                    syncPlatform === 'whatsapp'
+                      ? 'https://web.whatsapp.com'
+                      : 'https://messenger.com'
+                  )
+                }
+                disabled={syncing}
+              >
+                <Users size={18} /> Open & Sync
+              </button>
+              <button className="fgp-btn fgp-btn-primary" onClick={handleSync} disabled={syncing}>
+                {syncing ? (
+                  <>
+                    <div className="fgp-spinner" /> Syncing...
+                  </>
+                ) : (
+                  <>
+                    <Users size={18} /> Sync{' '}
+                    {syncPlatform === 'whatsapp' ? 'WhatsApp' : 'Messenger'} Groups
+                  </>
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
+      {lastSyncResult && (
+        <div
+          className="fgp-sync-result"
+          style={{ color: lastSyncResult.startsWith('✅') ? '#42b72a' : '#e63946' }}
+        >
+          {lastSyncResult}
+        </div>
+      )}
       <p className="fgp-hint">
         {syncPlatform === 'facebook'
           ? 'Open Facebook in another tab, go to your Groups page, then click Sync to import your groups.'
           : syncPlatform === 'whatsapp'
-            ? 'Open WhatsApp Web in another tab, go to your Chats/Groups, then click Sync to import your groups.'
-            : 'Open Messenger in another tab, go to your conversations, then click Sync to import your groups.'}
+            ? 'Click "Open & Sync" to open WhatsApp Web and auto-sync, or open manually then click Sync.'
+            : 'Click "Open & Sync" to open Messenger and auto-sync, or open manually then click Sync.'}
       </p>
       <div className="fgp-search">
         <Search size={18} />

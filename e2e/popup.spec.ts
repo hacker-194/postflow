@@ -15,7 +15,9 @@ test.describe.configure({ retries: 0, timeout: 60000 });
 
 test.beforeAll(async () => {
   if (!existsSync(path.join(EXTENSION_PATH, 'manifest.json'))) {
-    throw new Error(`Built extension not found at ${EXTENSION_PATH}. Run "npm run build" before the E2E tests.`);
+    throw new Error(
+      `Built extension not found at ${EXTENSION_PATH}. Run "npm run build" before the E2E tests.`
+    );
   }
 
   // Chromium extensions require a persistent, headed context. In CI, run this
@@ -34,15 +36,19 @@ test.beforeAll(async () => {
   // Manifest V3 background pages are service workers, not background pages.
   // Wait for the worker event instead of relying on a fixed sleep or tab URL.
   const serviceWorker =
-    persistentContext.serviceWorkers().find(worker => worker.url().startsWith('chrome-extension://')) ??
-    await persistentContext.waitForEvent('serviceworker', {
+    persistentContext
+      .serviceWorkers()
+      .find(worker => worker.url().startsWith('chrome-extension://')) ??
+    (await persistentContext.waitForEvent('serviceworker', {
       predicate: worker => worker.url().startsWith('chrome-extension://'),
       timeout: 15000,
-    });
+    }));
 
   extensionId = new URL(serviceWorker.url()).hostname;
   if (!extensionId) {
-    throw new Error(`Could not extract extension ID from service worker URL: ${serviceWorker.url()}`);
+    throw new Error(
+      `Could not extract extension ID from service worker URL: ${serviceWorker.url()}`
+    );
   }
 });
 
@@ -80,10 +86,10 @@ test.describe('Extension Popup', () => {
   test('navigates between tabs', async () => {
     const page = await openPopup();
     try {
-      await page.getByRole('button', { name: 'Lists' }).click();
+      await page.getByRole('button', { name: 'Lists', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Group Lists' })).toBeVisible();
-      await page.getByRole('button', { name: 'Settings' }).click();
-      await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
     } finally {
       await page.close();
     }

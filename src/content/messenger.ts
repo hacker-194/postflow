@@ -1,6 +1,77 @@
-import { logger } from '../shared/logger';
-import type { UserSettings } from '../shared/types';
-import { sanitizeHtml } from '../shared/security';
+// Self-contained Messenger content script - no external imports for ISOLATED world compatibility
+
+// --- Inlined Logger ---
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+interface LogEntry {
+  timestamp: number;
+  level: LogLevel;
+  context: string;
+  message: string;
+  data?: unknown;
+}
+
+class Logger {
+  private logs: LogEntry[] = [];
+  private maxLogs = 1000;
+  private minLevel: LogLevel = 'info';
+
+  private levelValue(level: LogLevel): number {
+    const levels = { debug: 0, info: 1, warn: 2, error: 3 };
+    return levels[level];
+  }
+
+  private shouldLog(level: LogLevel): boolean {
+    return this.levelValue(level) >= this.levelValue(this.minLevel);
+  }
+
+  private log(level: LogLevel, context: string, message: string, data?: unknown): void {
+    if (!this.shouldLog(level)) return;
+    const entry: LogEntry = { timestamp: Date.now(), level, context, message, data };
+    this.logs.push(entry);
+    if (this.logs.length > this.maxLogs) this.logs.shift();
+
+    const prefix = `[${new Date().toISOString()}] [${level.toUpperCase()}] [${context}]`;
+    switch (level) {
+      case 'debug':
+        console.debug(prefix, message, data ?? '');
+        break;
+      case 'info':
+        console.info(prefix, message, data ?? '');
+        break;
+      case 'warn':
+        console.warn(prefix, message, data ?? '');
+        break;
+      case 'error':
+        console.error(prefix, message, data ?? '');
+        break;
+    }
+  }
+
+  debug(context: string, message: string, data?: unknown): void {
+    this.log('debug', context, message, data);
+  }
+  info(context: string, message: string, data?: unknown): void {
+    this.log('info', context, message, data);
+  }
+  warn(context: string, message: string, data?: unknown): void {
+    this.log('warn', context, message, data);
+  }
+  error(context: string, message: string, data?: unknown): void {
+    this.log('error', context, message, data);
+  }
+}
+
+const logger = new Logger();
+// --- End Logger ---
+
+// --- Inlined sanitizeHtml ---
+function sanitizeHtml(input: string): string {
+  const div = document.createElement('div');
+  div.textContent = input;
+  return div.innerHTML;
+}
+// --- End sanitizeHtml ---
 
 logger.info('content-messenger', 'Messenger content script loaded');
 
@@ -8,10 +79,18 @@ let shareButtonInjected = false;
 let shareSheetInjected = false;
 let observer: MutationObserver | null = null;
 
+interface UserSettings {
+  showShareButton: boolean;
+  shareButtonPosition: 'after_share' | 'before_share';
+  theme: 'light' | 'dark';
+}
+
 async function getUserSettings(): Promise<UserSettings> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_USER_SETTINGS' }, response => {
-      resolve(response || {});
+      resolve(
+        response || { showShareButton: true, shareButtonPosition: 'after_share', theme: 'light' }
+      );
     });
   });
 }
@@ -40,7 +119,6 @@ function setupObserver(): void {
 }
 
 function checkForShareButtons(): void {
-  // Messenger share button selectors (updated for current UI)
   const shareSelectors = [
     '[data-testid="share-button"]',
     '[aria-label*="Share" i]',
@@ -68,7 +146,6 @@ async function injectShareButton(): Promise<void> {
   const userSettings = await getUserSettings();
   if (!userSettings.showShareButton) return;
 
-  // Try multiple selectors for the share button
   const shareSelectors = [
     '[data-testid="share-button"]',
     '[aria-label*="Share" i]',
@@ -108,7 +185,6 @@ async function injectShareButton(): Promise<void> {
 }
 
 function injectFallbackButton(): void {
-  // Try to find the message input area and add a floating button there
   const footerSelectors = [
     '[data-testid="composer"]',
     '[role="textbox"]',
@@ -199,7 +275,6 @@ function closeShareSheet(): void {
 async function getMessengerGroups(): Promise<Array<{ id: string; name: string }>> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_MESSENGER_GROUPS' }, response => {
-      // Handle both array and object responses
       if (Array.isArray(response)) {
         resolve(response);
       } else if (response && typeof response === 'object') {
@@ -379,20 +454,16 @@ async function shareMessage(
   groupId: string,
   messageData: { text?: string; media?: boolean }
 ): Promise<void> {
-  // Extract the original group name from the ID (format: ms_name_with_underscores)
   const groupName = groupId.replace('ms_', '').replace(/_/g, ' ');
 
-  // Find the group/conversation in the chat list
   const chatElement = await findChatByName(groupName);
   if (!chatElement) {
     throw new Error(`Group "${groupName}" not found in chat list`);
   }
 
-  // Click the chat to open it
   chatElement.click();
   await sleep(1000);
 
-  // Find and fill the message input
   const messageInput = await findMessageInput();
   if (!messageInput) {
     throw new Error('Message input not found');
@@ -403,7 +474,6 @@ async function shareMessage(
     await sleep(300);
   }
 
-  // Find and click send button
   const sendButton = await findSendButton();
   if (!sendButton) {
     throw new Error('Send button not found');
@@ -416,28 +486,31 @@ async function shareMessage(
 function findChatByName(name: string): Promise<HTMLElement | null> {
   return new Promise(resolve => {
     const search = () => {
-      // Messenger chat list items - multiple selector strategies
       const chatSelectors = [
         '[role="listitem"]',
         '[data-testid="thread-list-item"]',
         '[data-testid="cell-frame-container"]',
+        '[data-testid="conversation-list-item"]',
         'div[role="row"]',
         '.x1yztbdb',
         '.x1n2onr6',
         '.x78zum5',
         '.x1q0g3np',
         '[aria-label*="Conversation"]',
+        '[data-pagelet*="Messenger"] [role="listitem"]',
       ];
 
       const nameSelectors = [
         '[role="heading"]',
         '[data-testid="thread-name"]',
         '[data-testid="cell-frame-title"]',
+        '[data-testid="conversation-name"]',
         'strong',
         '.x1lliihq',
         '[dir="auto"]',
         'span[dir="auto"]',
         'div[dir="auto"]',
+        'span[aria-label]',
       ];
 
       for (const chatSel of chatSelectors) {
@@ -483,7 +556,6 @@ function findChatByName(name: string): Promise<HTMLElement | null> {
 function findMessageInput(): Promise<HTMLElement | null> {
   return new Promise(resolve => {
     const search = () => {
-      // Messenger message input selectors
       const selectors = [
         '[contenteditable="true"][data-testid="composer-input"]',
         '[contenteditable="true"][aria-label*="Message" i]',
@@ -520,12 +592,10 @@ async function typeMessage(input: HTMLElement, text: string): Promise<void> {
   input.focus();
   await sleep(100);
 
-  // Clear existing content
   input.textContent = '';
   input.dispatchEvent(new Event('input', { bubbles: true }));
   await sleep(50);
 
-  // Type the message
   input.textContent = text;
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));

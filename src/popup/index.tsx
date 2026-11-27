@@ -12,7 +12,6 @@ import {
   Edit,
   Download,
   Upload,
-  ChevronDown,
   Calendar,
 } from 'lucide-react';
 import type { GroupList, ScheduledShare, ShareResult, UserSettings } from '../shared/types';
@@ -69,6 +68,23 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
   const fbLists = state.groupLists.filter(l => l.platform === 'facebook').length;
   const waLists = state.groupLists.filter(l => l.platform === 'whatsapp').length;
   const msLists = state.groupLists.filter(l => l.platform === 'messenger').length;
+
+  const openAndSync = (url: string, type: 'SYNC_WHATSAPP_GROUPS' | 'SYNC_MESSENGER_GROUPS') => {
+    chrome.tabs.create({ url, active: true });
+    setTimeout(async () => {
+      try {
+        const result = await chrome.runtime.sendMessage({ type });
+        if (result.success && result.groups) {
+          alert(`✅ Found ${result.groups.length} groups!`);
+          refresh();
+        } else {
+          alert(`❌ ${result.error || 'Failed - make sure page loaded fully'}`);
+        }
+      } catch (error) {
+        alert(`❌ ${error}`);
+      }
+    }, 3000);
+  };
 
   return (
     <div className="fgp-tab-content">
@@ -139,11 +155,37 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
 
       <div className="fgp-section">
         <div className="fgp-section-header">
-          <h3>Quick Actions</h3>
+          <h3>Quick Sync</h3>
         </div>
         <div className="fgp-action-buttons">
           <button
+            className="fgp-btn fgp-btn-secondary"
+            onClick={() => chrome.runtime.openOptionsPage()}
+          >
+            <Settings size={18} /> Manage Lists
+          </button>
+          <button
             className="fgp-btn fgp-btn-primary"
+            onClick={() => openAndSync('https://web.whatsapp.com', 'SYNC_WHATSAPP_GROUPS')}
+          >
+            <Users size={18} /> Sync WhatsApp
+          </button>
+          <button
+            className="fgp-btn fgp-btn-primary"
+            onClick={() => openAndSync('https://messenger.com', 'SYNC_MESSENGER_GROUPS')}
+          >
+            <Users size={18} /> Sync Messenger
+          </button>
+        </div>
+      </div>
+
+      <div className="fgp-section">
+        <div className="fgp-section-header">
+          <h3>Open Platforms</h3>
+        </div>
+        <div className="fgp-action-buttons">
+          <button
+            className="fgp-btn fgp-btn-secondary"
             onClick={() => chrome.tabs.create({ url: 'https://facebook.com' })}
           >
             <Send size={18} /> Open Facebook
@@ -159,15 +201,6 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
             onClick={() => chrome.tabs.create({ url: 'https://messenger.com' })}
           >
             <Send size={18} /> Open Messenger
-          </button>
-          <button
-            className="fgp-btn fgp-btn-secondary"
-            onClick={() => chrome.runtime.openOptionsPage()}
-          >
-            <Settings size={18} /> Manage Lists
-          </button>
-          <button className="fgp-btn fgp-btn-secondary" onClick={refresh}>
-            <ChevronDown size={18} /> Refresh Data
           </button>
         </div>
       </div>

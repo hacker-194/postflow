@@ -30,21 +30,24 @@
       "js": ["content.js"],
       "run_at": "document_idle",
       "all_frames": false,
-      "world": "ISOLATED"
+      "world": "ISOLATED",
+      "type": "module"
     },
     {
       "matches": ["*://web.whatsapp.com/*"],
       "js": ["content-whatsapp.js"],
       "run_at": "document_idle",
       "all_frames": false,
-      "world": "ISOLATED"
+      "world": "ISOLATED",
+      "type": "module"
     },
     {
       "matches": ["*://www.messenger.com/*", "*://messenger.com/*"],
       "js": ["content-messenger.js"],
       "run_at": "document_idle",
       "all_frames": false,
-      "world": "ISOLATED"
+      "world": "ISOLATED",
+      "type": "module"
     }
   ],
   "options_page": "options.html",

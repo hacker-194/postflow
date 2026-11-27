@@ -1,6 +1,77 @@
-import { logger } from '../shared/logger';
-import type { UserSettings } from '../shared/types';
-import { sanitizeHtml } from '../shared/security';
+// Self-contained WhatsApp content script - no external imports for ISOLATED world compatibility
+
+// --- Inlined Logger ---
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+interface LogEntry {
+  timestamp: number;
+  level: LogLevel;
+  context: string;
+  message: string;
+  data?: unknown;
+}
+
+class Logger {
+  private logs: LogEntry[] = [];
+  private maxLogs = 1000;
+  private minLevel: LogLevel = 'info';
+
+  private levelValue(level: LogLevel): number {
+    const levels = { debug: 0, info: 1, warn: 2, error: 3 };
+    return levels[level];
+  }
+
+  private shouldLog(level: LogLevel): boolean {
+    return this.levelValue(level) >= this.levelValue(this.minLevel);
+  }
+
+  private log(level: LogLevel, context: string, message: string, data?: unknown): void {
+    if (!this.shouldLog(level)) return;
+    const entry: LogEntry = { timestamp: Date.now(), level, context, message, data };
+    this.logs.push(entry);
+    if (this.logs.length > this.maxLogs) this.logs.shift();
+
+    const prefix = `[${new Date().toISOString()}] [${level.toUpperCase()}] [${context}]`;
+    switch (level) {
+      case 'debug':
+        console.debug(prefix, message, data ?? '');
+        break;
+      case 'info':
+        console.info(prefix, message, data ?? '');
+        break;
+      case 'warn':
+        console.warn(prefix, message, data ?? '');
+        break;
+      case 'error':
+        console.error(prefix, message, data ?? '');
+        break;
+    }
+  }
+
+  debug(context: string, message: string, data?: unknown): void {
+    this.log('debug', context, message, data);
+  }
+  info(context: string, message: string, data?: unknown): void {
+    this.log('info', context, message, data);
+  }
+  warn(context: string, message: string, data?: unknown): void {
+    this.log('warn', context, message, data);
+  }
+  error(context: string, message: string, data?: unknown): void {
+    this.log('error', context, message, data);
+  }
+}
+
+const logger = new Logger();
+// --- End Logger ---
+
+// --- Inlined sanitizeHtml ---
+function sanitizeHtml(input: string): string {
+  const div = document.createElement('div');
+  div.textContent = input;
+  return div.innerHTML;
+}
+// --- End sanitizeHtml ---
 
 logger.info('content-whatsapp', 'WhatsApp content script loaded');
 
@@ -8,10 +79,18 @@ let shareButtonInjected = false;
 let shareSheetInjected = false;
 let observer: MutationObserver | null = null;
 
+interface UserSettings {
+  showShareButton: boolean;
+  shareButtonPosition: 'after_share' | 'before_share';
+  theme: 'light' | 'dark';
+}
+
 async function getUserSettings(): Promise<UserSettings> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_USER_SETTINGS' }, response => {
-      resolve(response || {});
+      resolve(
+        response || { showShareButton: true, shareButtonPosition: 'after_share', theme: 'light' }
+      );
     });
   });
 }
@@ -40,7 +119,6 @@ function setupObserver(): void {
 }
 
 function checkForForwardButtons(): void {
-  // WhatsApp Web forward button selectors (updated for current UI)
   const forwardSelectors = [
     '[data-testid="forward"]',
     '[data-testid="msg-forward"]',
@@ -73,7 +151,6 @@ async function injectShareButton(): Promise<void> {
   const userSettings = await getUserSettings();
   if (!userSettings.showShareButton) return;
 
-  // Try multiple selectors for the forward button
   const forwardSelectors = [
     '[data-testid="forward"]',
     '[data-testid="msg-forward"]',
@@ -108,7 +185,6 @@ async function injectShareButton(): Promise<void> {
 
   if (!injected) {
     logger.warn('content-whatsapp', 'Could not inject share button - no forward button found');
-    // Fallback: try to find any button in the message menu/footer area
     injectFallbackButton();
   } else {
     shareButtonInjected = true;
@@ -116,7 +192,6 @@ async function injectShareButton(): Promise<void> {
 }
 
 function injectFallbackButton(): void {
-  // Try to find the message input footer area and add a floating button there
   const footerSelectors = [
     'footer[role="region"]',
     'footer',
@@ -206,7 +281,6 @@ function closeShareSheet(): void {
 async function getWhatsAppGroups(): Promise<Array<{ id: string; name: string }>> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_WHATSAPP_GROUPS' }, response => {
-      // Handle both array and object responses
       if (Array.isArray(response)) {
         resolve(response);
       } else if (response && typeof response === 'object') {
@@ -388,20 +462,16 @@ async function forwardMessage(
   contactId: string,
   messageData: { text?: string; media?: boolean }
 ): Promise<void> {
-  // Extract the original contact name from the ID (format: wa_name_with_underscores)
   const contactName = contactId.replace('wa_', '').replace(/_/g, ' ');
 
-  // Find the chat in the chat list
   const chatElement = await findChatByName(contactName);
   if (!chatElement) {
     throw new Error(`Chat "${contactName}" not found in chat list`);
   }
 
-  // Click the chat to open it
   chatElement.click();
   await sleep(800);
 
-  // Find and fill the message input
   const messageInput = await findMessageInput();
   if (!messageInput) {
     throw new Error('Message input not found');
@@ -412,7 +482,6 @@ async function forwardMessage(
     await sleep(300);
   }
 
-  // Find and click send button
   const sendButton = await findSendButton();
   if (!sendButton) {
     throw new Error('Send button not found');
@@ -425,7 +494,6 @@ async function forwardMessage(
 function findChatByName(name: string): Promise<HTMLElement | null> {
   return new Promise(resolve => {
     const search = () => {
-      // WhatsApp Web chat list items - multiple selector strategies
       const chatSelectors = [
         '[role="listitem"]',
         '[data-testid="chat-list-item"]',
@@ -478,13 +546,11 @@ function findChatByName(name: string): Promise<HTMLElement | null> {
 
     search();
 
-    // If not found, wait for chat list to load
     const observer = new MutationObserver(() => {
       search();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Timeout after 10 seconds
     setTimeout(() => {
       observer.disconnect();
       resolve(null);
@@ -495,7 +561,6 @@ function findChatByName(name: string): Promise<HTMLElement | null> {
 function findMessageInput(): Promise<HTMLElement | null> {
   return new Promise(resolve => {
     const search = () => {
-      // WhatsApp Web message input selectors
       const selectors = [
         '[data-testid="conversation-compose-box-input"]',
         '[contenteditable="true"][data-tab="10"]',
@@ -532,12 +597,10 @@ async function typeMessage(input: HTMLElement, text: string): Promise<void> {
   input.focus();
   await sleep(100);
 
-  // Clear existing content
   input.textContent = '';
   input.dispatchEvent(new Event('input', { bubbles: true }));
   await sleep(50);
 
-  // Type the message
   input.textContent = text;
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
