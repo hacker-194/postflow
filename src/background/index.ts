@@ -957,139 +957,72 @@ async function saveGroups(
 }
 
 function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?: string }> {
-  const groups: Array<{ id: string; name: string; url?: string }> = [];
-  const seenIds = new Set<string>();
-
-  // Prefer platform-specific chat containers before generic list elements.
-  const chatSelectors = [
-    '[data-testid="chat-list-item"]',
-    '[data-testid="cell-frame-container"]',
-    '[data-testid="conversation-list-item"]',
-    '#pane-side [role="listitem"]',
-    '#pane-side div[role="row"]',
-    '._ak8l',
-    '._ak8o',
-    '._ak8q',
-    '._ak8s',
-    '.x1yztbdb',
-    '.x1n2onr6',
-    '[aria-label*="Chat"]',
-    '[role="listitem"]',
-    'div[role="row"]',
-  ];
-
-  // Prefer explicit title/name nodes over generic text and message previews.
-  const nameSelectors = [
-    '[data-testid="cell-frame-title"]',
-    '[data-testid="contact-name"]',
-    '[data-testid="conversation-title"]',
-    'span[title]',
-    '._ao3e',
-    '.x1iyjqo2',
-    '[dir="auto"]',
-    'span[dir="auto"]',
-    'div[dir="auto"]',
-    'span[aria-label]',
-  ];
-
-  for (const chatSel of chatSelectors) {
-    const chatItems = document.querySelectorAll(chatSel);
-    for (const el of chatItems) {
-      let name = '';
-      for (const nameSel of nameSelectors) {
-        const nameEl = el.querySelector(nameSel) as HTMLElement;
-        if (nameEl?.textContent?.trim()) {
-          name = nameEl.textContent.trim();
-          break;
-        }
-      }
-      // Fallback: try to get any text content from the element
-      if (!name && el.textContent?.trim()) {
-        const text = el.textContent.trim();
-        // Filter out very long text (likely not a name) and system messages
-        if (text.length > 1 && text.length < 100 && !text.includes('\n')) {
-          name = text;
-        }
-      }
-
-      if (name && name.length > 1) {
-        const id = 'wa_' + name.replace(/\s+/g, '_').toLowerCase();
-        if (!seenIds.has(id)) {
-          seenIds.add(id);
-          groups.push({ id, name });
-        }
-      }
-    }
-    // If we found groups with this selector, stop trying others
-    if (groups.length > 0) break;
-  }
-
-  return groups;
+  return extractPlatformGroupRows('whatsapp');
 }
 
 function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url?: string }> {
-  const groups: Array<{ id: string; name: string; url?: string }> = [];
-  const seenIds = new Set<string>();
+  return extractPlatformGroupRows('messenger');
+}
 
-  // Prefer Messenger-specific conversation containers before generic list elements.
-  const chatSelectors = [
-    '[data-testid="thread-list-item"]',
-    '[data-testid="cell-frame-container"]',
-    '[data-testid="conversation-list-item"]',
-    '[data-pagelet*="Messenger"] [role="listitem"]',
-    '[aria-label*="Conversation"]',
-    '.x1yztbdb',
-    '.x1n2onr6',
-    '.x78zum5',
-    '.x1q0g3np',
-    '[role="listitem"]',
-    'div[role="row"]',
-  ];
+/**
+ * Extract only rows with explicit group evidence. Generic chat rows are intentionally
+ * ignored because they also contain private conversations and message previews.
+ * Platform DOMs change frequently; when group metadata is absent, fail closed.
+ */
+function extractPlatformGroupRows(
+  platform: 'whatsapp' | 'messenger'
+): Array<{ id: string; name: string; url?: string }> {
+  const rows: Array<{ id: string; name: string; url?: string }> = [];
+  const seen = new Set<string>();
+  const selectors = platform === 'whatsapp'
+    ? [
+        '[data-testid="chat-list-item"]',
+        '[data-testid="cell-frame-container"]',
+        '#pane-side [role="listitem"]',
+      ]
+    : [
+        '[data-testid="thread-list-item"]',
+        '[data-testid="conversation-list-item"]',
+        '[data-pagelet*="Messenger"] [role="listitem"]',
+      ];
 
-  const nameSelectors = [
-    '[role="heading"]',
-    '[data-testid="thread-name"]',
-    '[data-testid="cell-frame-title"]',
-    '[data-testid="conversation-name"]',
-    'strong',
-    '.x1lliihq',
-    '[dir="auto"]',
-    'span[dir="auto"]',
-    'div[dir="auto"]',
-    'span[aria-label]',
-  ];
+  for (const selector of selectors) {
+    for (const row of document.querySelectorAll<HTMLElement>(selector)) {
+      const evidence = [
+        row.getAttribute('aria-label') || '',
+        row.getAttribute('title') || '',
+        row.getAttribute('data-testid') || '',
+        ...Array.from(row.querySelectorAll<HTMLElement>('[aria-label], [title]'))
+          .flatMap(node => [node.getAttribute('aria-label') || '', node.getAttribute('title') || '']),
+      ].join(' ').toLowerCase();
 
-  for (const chatSel of chatSelectors) {
-    const chatItems = document.querySelectorAll(chatSel);
-    for (const el of chatItems) {
-      let name = '';
-      for (const nameSel of nameSelectors) {
-        const nameEl = el.querySelector(nameSel) as HTMLElement;
-        if (nameEl?.textContent?.trim()) {
-          name = nameEl.textContent.trim();
-          break;
-        }
-      }
-      // Fallback: try to get any text content from the element
-      if (!name && el.textContent?.trim()) {
-        const text = el.textContent.trim();
-        if (text.length > 1 && text.length < 100 && !text.includes('\n')) {
-          name = text;
-        }
-      }
+      const hasGroupEvidence =
+        /\bgroup\b|\bgroup chat\b|\b\d+ participants?\b|\b\d+ members?\b/.test(evidence);
+      if (!hasGroupEvidence) continue;
 
-      if (name && name.length > 1) {
-        const id = 'ms_' + name.replace(/\s+/g, '_').toLowerCase();
-        if (!seenIds.has(id)) {
-          seenIds.add(id);
-          groups.push({ id, name });
-        }
-      }
+      const nameNode = row.querySelector<HTMLElement>(
+        '[data-testid="cell-frame-title"], [data-testid="thread-name"], [data-testid="conversation-title"], [role="heading"], span[title]'
+      );
+      const name = (nameNode?.getAttribute('title') || nameNode?.textContent || '').trim();
+      if (!name || name.length > 100 || name.includes('\n')) continue;
+
+      const link = row.querySelector<HTMLAnchorElement>('a[href]');
+      const href = link?.getAttribute('href') || '';
+      const rowKey =
+        row.getAttribute('data-id') ||
+        row.getAttribute('data-testid') ||
+        href ||
+        name.toLocaleLowerCase();
+      const id = (platform === 'whatsapp' ? 'wa_' : 'ms_') +
+        rowKey.trim().replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 120);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      rows.push({ id, name, ...(href ? { url: href } : {}) });
     }
-    if (groups.length > 0) break;
+    if (rows.length) break;
   }
 
-  return groups;
+  return rows;
 }
 
 async function getCurrentMessage(
