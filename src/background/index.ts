@@ -698,7 +698,7 @@ async function handleSyncGroups(tabId?: number): Promise<{
     if (tabs[0]?.id) tabId = tabs[0].id;
   }
   if (!tabId) {
-    return { success: false, error: 'No Facebook tab open' };
+    return { success: false, error: 'No Facebook tab open. Open a Facebook page and try again.' };
   }
 
   return new Promise(resolve => {
@@ -708,14 +708,36 @@ async function handleSyncGroups(tabId?: number): Promise<{
         func: extractGroupsFromPage,
       },
       results => {
-        if (chrome.runtime.lastError || !results?.[0]?.result) {
+        if (chrome.runtime.lastError) {
+          logger.error('background', 'Script injection failed', {
+            error: chrome.runtime.lastError.message,
+          });
           resolve({
             success: false,
-            error: chrome.runtime.lastError?.message || 'Extraction failed',
+            error: `Script injection failed: ${chrome.runtime.lastError.message}. Make sure you're on a Facebook page (not chrome:// or extension pages).`,
           });
           return;
         }
-        resolve({ success: true, groups: results[0].result });
+        if (!results?.[0]?.result) {
+          logger.warn('background', 'No groups extracted - empty result');
+          resolve({
+            success: false,
+            error:
+              'No groups found on this page. Navigate to your Facebook Groups page (facebook.com/groups/feed/) and try again.',
+          });
+          return;
+        }
+        const groups = results[0].result;
+        logger.info('background', 'Groups extracted', { count: groups.length });
+        if (groups.length === 0) {
+          resolve({
+            success: false,
+            error:
+              'No groups found. Make sure you are on facebook.com/groups/feed/ or a page showing your groups.',
+          });
+          return;
+        }
+        resolve({ success: true, groups });
       }
     );
   });
@@ -729,19 +751,73 @@ function extractGroupsFromPage(): Array<{
 }> {
   const groups: Array<{ id: string; name: string; url: string; memberCount?: number }> = [];
 
-  document.querySelectorAll('[role="listitem"], .x1yztbdb, .x1n2onr6').forEach(el => {
-    const link = el.querySelector('a[href*="/groups/"]') as HTMLAnchorElement;
-    if (link) {
-      const nameEl = el.querySelector('[role="heading"], strong, .x1lliihq');
-      const name = nameEl?.textContent?.trim();
+  // Multiple selector strategies for Facebook Groups page
+  const groupItemSelectors = [
+    '[role="listitem"]',
+    '[data-testid="group-card"]',
+    '[data-pagelet="GroupsYouManageFeedUnit"] [role="listitem"]',
+    '.x1yztbdb',
+    '.x1n2onr6',
+    '.x78zum5',
+    '.x1q0g3np',
+    '.x1iyjqo2',
+    'div[role="article"]',
+  ];
+
+  const nameSelectors = [
+    '[role="heading"]',
+    'strong',
+    '.x1lliihq',
+    '[dir="auto"]',
+    '[data-testid="group-name"]',
+    'h3',
+    'h4',
+  ];
+
+  const linkSelectors = ['a[href*="/groups/"]', 'a[href*="facebook.com/groups/"]'];
+
+  for (const itemSel of groupItemSelectors) {
+    const items = document.querySelectorAll(itemSel);
+    for (const el of items) {
+      // Find group link
+      let link: HTMLAnchorElement | null = null;
+      for (const linkSel of linkSelectors) {
+        link = el.querySelector(linkSel) as HTMLAnchorElement;
+        if (link) break;
+      }
+
+      if (!link) continue;
+
+      // Find group name
+      let name = '';
+      for (const nameSel of nameSelectors) {
+        const nameEl = el.querySelector(nameSel) as HTMLElement;
+        if (nameEl?.textContent?.trim()) {
+          name = nameEl.textContent.trim();
+          break;
+        }
+      }
+
       const url = link.href;
       const idMatch = url.match(/groups\/(\d+)/) || url.match(/groups\/([^\/?]+)/);
       const id = idMatch?.[1] || url;
+
       if (name && name.length > 1) {
-        groups.push({ id, name, url });
+        // Try to extract member count
+        let memberCount: number | undefined;
+        const memberText = el.textContent || '';
+        const memberMatch = memberText.match(/(\d[\d,]*)\s*(members?|people)/i);
+        if (memberMatch) {
+          memberCount = parseInt(memberMatch[1].replace(/,/g, ''), 10);
+        }
+
+        if (!groups.some(g => g.id === id)) {
+          groups.push({ id, name, url, memberCount });
+        }
       }
     }
-  });
+    if (groups.length > 0) break;
+  }
 
   return groups;
 }
@@ -756,7 +832,10 @@ async function handleSyncWhatsAppGroups(tabId?: number): Promise<{
     if (tabs[0]?.id) tabId = tabs[0].id;
   }
   if (!tabId) {
-    return { success: false, error: 'No WhatsApp Web tab open' };
+    return {
+      success: false,
+      error: 'No WhatsApp Web tab open. Open web.whatsapp.com and try again.',
+    };
   }
 
   return new Promise(resolve => {
@@ -766,14 +845,35 @@ async function handleSyncWhatsAppGroups(tabId?: number): Promise<{
         func: extractWhatsAppGroupsFromPage,
       },
       results => {
-        if (chrome.runtime.lastError || !results?.[0]?.result) {
+        if (chrome.runtime.lastError) {
+          logger.error('background', 'WhatsApp script injection failed', {
+            error: chrome.runtime.lastError.message,
+          });
           resolve({
             success: false,
-            error: chrome.runtime.lastError?.message || 'Extraction failed',
+            error: `Script injection failed: ${chrome.runtime.lastError.message}. Make sure you're on web.whatsapp.com.`,
+          });
+          return;
+        }
+        if (!results?.[0]?.result) {
+          logger.warn('background', 'No WhatsApp groups extracted');
+          resolve({
+            success: false,
+            error:
+              'No groups found. Open WhatsApp Web, go to your Chats/Groups list, and try again.',
           });
           return;
         }
         const groups = results[0].result;
+        logger.info('background', 'WhatsApp groups extracted', { count: groups.length });
+        if (groups.length === 0) {
+          resolve({
+            success: false,
+            error:
+              'No WhatsApp groups found. Make sure you are on the Chats tab showing your conversations.',
+          });
+          return;
+        }
         saveGroups(groups, 'whatsapp').then(() => {
           resolve({ success: true, groups });
         });
@@ -788,11 +888,13 @@ async function handleSyncMessengerGroups(tabId?: number): Promise<{
   error?: string;
 }> {
   if (!tabId) {
-    const tabs = await chrome.tabs.query({ url: '*://www.messenger.com/*' });
+    const tabs = await chrome.tabs.query({
+      url: ['*://www.messenger.com/*', '*://messenger.com/*'],
+    });
     if (tabs[0]?.id) tabId = tabs[0].id;
   }
   if (!tabId) {
-    return { success: false, error: 'No Messenger tab open' };
+    return { success: false, error: 'No Messenger tab open. Open messenger.com and try again.' };
   }
 
   return new Promise(resolve => {
@@ -802,14 +904,33 @@ async function handleSyncMessengerGroups(tabId?: number): Promise<{
         func: extractMessengerGroupsFromPage,
       },
       results => {
-        if (chrome.runtime.lastError || !results?.[0]?.result) {
+        if (chrome.runtime.lastError) {
+          logger.error('background', 'Messenger script injection failed', {
+            error: chrome.runtime.lastError.message,
+          });
           resolve({
             success: false,
-            error: chrome.runtime.lastError?.message || 'Extraction failed',
+            error: `Script injection failed: ${chrome.runtime.lastError.message}. Make sure you're on messenger.com.`,
+          });
+          return;
+        }
+        if (!results?.[0]?.result) {
+          logger.warn('background', 'No Messenger groups extracted');
+          resolve({
+            success: false,
+            error: 'No groups found. Open Messenger, go to your conversations list, and try again.',
           });
           return;
         }
         const groups = results[0].result;
+        logger.info('background', 'Messenger groups extracted', { count: groups.length });
+        if (groups.length === 0) {
+          resolve({
+            success: false,
+            error: 'No Messenger groups found. Make sure you are on the conversations list page.',
+          });
+          return;
+        }
         saveGroups(groups, 'messenger').then(() => {
           resolve({ success: true, groups });
         });
@@ -838,14 +959,64 @@ async function saveGroups(
 function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?: string }> {
   const groups: Array<{ id: string; name: string; url?: string }> = [];
 
-  document.querySelectorAll('[role="listitem"], ._ak8l, ._ak8o').forEach(el => {
-    const nameEl = el.querySelector('[dir="auto"], ._ao3e, .x1iyjqo2') as HTMLElement;
-    const name = nameEl?.textContent?.trim();
-    if (name && name.length > 1) {
-      const id = 'wa_' + name.replace(/\s+/g, '_').toLowerCase();
-      groups.push({ id, name });
+  // Multiple selector strategies for WhatsApp Web chat list (auto-generated classes change frequently)
+  const chatSelectors = [
+    '[role="listitem"]',
+    '[data-testid="chat-list-item"]',
+    '[data-testid="cell-frame-container"]',
+    'div[role="row"]',
+    '._ak8l',
+    '._ak8o',
+    '._ak8q',
+    '._ak8s',
+    '.x1yztbdb',
+    '.x1n2onr6',
+    '[aria-label*="Chat"]',
+  ];
+
+  const nameSelectors = [
+    '[dir="auto"]',
+    '[data-testid="cell-frame-title"]',
+    '[data-testid="contact-name"]',
+    '._ao3e',
+    '.x1iyjqo2',
+    '.x1iyjqo2',
+    'span[title]',
+    'span[dir="auto"]',
+    'div[dir="auto"]',
+  ];
+
+  for (const chatSel of chatSelectors) {
+    const chatItems = document.querySelectorAll(chatSel);
+    for (const el of chatItems) {
+      let name = '';
+      for (const nameSel of nameSelectors) {
+        const nameEl = el.querySelector(nameSel) as HTMLElement;
+        if (nameEl?.textContent?.trim()) {
+          name = nameEl.textContent.trim();
+          break;
+        }
+      }
+      // Fallback: try to get any text content from the element
+      if (!name && el.textContent?.trim()) {
+        const text = el.textContent.trim();
+        // Filter out very long text (likely not a name) and system messages
+        if (text.length > 1 && text.length < 100 && !text.includes('\n')) {
+          name = text;
+        }
+      }
+
+      if (name && name.length > 1) {
+        const id = 'wa_' + name.replace(/\s+/g, '_').toLowerCase();
+        // Check if already added
+        if (!groups.some(g => g.id === id)) {
+          groups.push({ id, name });
+        }
+      }
     }
-  });
+    // If we found groups with this selector, stop trying others
+    if (groups.length > 0) break;
+  }
 
   return groups;
 }
@@ -853,16 +1024,58 @@ function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?
 function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url?: string }> {
   const groups: Array<{ id: string; name: string; url?: string }> = [];
 
-  document.querySelectorAll('[role="listitem"], .x1yztbdb, .x1n2onr6').forEach(el => {
-    const nameEl = el.querySelector(
-      '[role="heading"], strong, .x1lliihq, [dir="auto"]'
-    ) as HTMLElement;
-    const name = nameEl?.textContent?.trim();
-    if (name && name.length > 1) {
-      const id = 'ms_' + name.replace(/\s+/g, '_').toLowerCase();
-      groups.push({ id, name });
+  // Multiple selector strategies for Messenger chat list
+  const chatSelectors = [
+    '[role="listitem"]',
+    '[data-testid="thread-list-item"]',
+    '[data-testid="cell-frame-container"]',
+    'div[role="row"]',
+    '.x1yztbdb',
+    '.x1n2onr6',
+    '.x78zum5',
+    '.x1q0g3np',
+    '[aria-label*="Conversation"]',
+  ];
+
+  const nameSelectors = [
+    '[role="heading"]',
+    '[data-testid="thread-name"]',
+    '[data-testid="cell-frame-title"]',
+    'strong',
+    '.x1lliihq',
+    '[dir="auto"]',
+    'span[dir="auto"]',
+    'div[dir="auto"]',
+  ];
+
+  for (const chatSel of chatSelectors) {
+    const chatItems = document.querySelectorAll(chatSel);
+    for (const el of chatItems) {
+      let name = '';
+      for (const nameSel of nameSelectors) {
+        const nameEl = el.querySelector(nameSel) as HTMLElement;
+        if (nameEl?.textContent?.trim()) {
+          name = nameEl.textContent.trim();
+          break;
+        }
+      }
+      // Fallback: try to get any text content from the element
+      if (!name && el.textContent?.trim()) {
+        const text = el.textContent.trim();
+        if (text.length > 1 && text.length < 100 && !text.includes('\n')) {
+          name = text;
+        }
+      }
+
+      if (name && name.length > 1) {
+        const id = 'ms_' + name.replace(/\s+/g, '_').toLowerCase();
+        if (!groups.some(g => g.id === id)) {
+          groups.push({ id, name });
+        }
+      }
     }
-  });
+    if (groups.length > 0) break;
+  }
 
   return groups;
 }

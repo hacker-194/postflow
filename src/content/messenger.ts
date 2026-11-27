@@ -136,7 +136,14 @@ function closeShareSheet(): void {
 async function getMessengerGroups(): Promise<Array<{ id: string; name: string }>> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_MESSENGER_GROUPS' }, response => {
-      resolve(response || []);
+      // Handle both array and object responses
+      if (Array.isArray(response)) {
+        resolve(response);
+      } else if (response && typeof response === 'object') {
+        resolve(Object.values(response));
+      } else {
+        resolve([]);
+      }
     });
   });
 }
@@ -346,18 +353,51 @@ async function shareMessage(
 function findChatByName(name: string): Promise<HTMLElement | null> {
   return new Promise(resolve => {
     const search = () => {
-      // Messenger chat list items
-      const chatItems = document.querySelectorAll(
-        '[role="listitem"], .x1yztbdb, .x1n2onr6, [data-testid="thread-list-item"]'
-      );
-      for (const item of chatItems) {
-        const nameEl = item.querySelector(
-          '[role="heading"], strong, .x1lliihq, [dir="auto"], [data-testid="thread-name"]'
-        ) as HTMLElement;
-        const itemName = nameEl?.textContent?.trim();
-        if (itemName && itemName.toLowerCase() === name.toLowerCase()) {
-          resolve(item as HTMLElement);
-          return;
+      // Messenger chat list items - multiple selector strategies
+      const chatSelectors = [
+        '[role="listitem"]',
+        '[data-testid="thread-list-item"]',
+        '[data-testid="cell-frame-container"]',
+        'div[role="row"]',
+        '.x1yztbdb',
+        '.x1n2onr6',
+        '.x78zum5',
+        '.x1q0g3np',
+        '[aria-label*="Conversation"]',
+      ];
+
+      const nameSelectors = [
+        '[role="heading"]',
+        '[data-testid="thread-name"]',
+        '[data-testid="cell-frame-title"]',
+        'strong',
+        '.x1lliihq',
+        '[dir="auto"]',
+        'span[dir="auto"]',
+        'div[dir="auto"]',
+      ];
+
+      for (const chatSel of chatSelectors) {
+        const chatItems = document.querySelectorAll(chatSel);
+        for (const item of chatItems) {
+          let itemName = '';
+          for (const nameSel of nameSelectors) {
+            const nameEl = item.querySelector(nameSel) as HTMLElement;
+            if (nameEl?.textContent?.trim()) {
+              itemName = nameEl.textContent.trim();
+              break;
+            }
+          }
+          if (!itemName && item.textContent?.trim()) {
+            const text = item.textContent.trim();
+            if (text.length > 1 && text.length < 100 && !text.includes('\n')) {
+              itemName = text;
+            }
+          }
+          if (itemName && itemName.toLowerCase() === name.toLowerCase()) {
+            resolve(item as HTMLElement);
+            return;
+          }
         }
       }
       resolve(null);
