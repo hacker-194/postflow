@@ -66,6 +66,10 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
     );
   }).length;
 
+  const fbLists = state.groupLists.filter(l => l.platform === 'facebook').length;
+  const waLists = state.groupLists.filter(l => l.platform === 'whatsapp').length;
+  const msLists = state.groupLists.filter(l => l.platform === 'messenger').length;
+
   return (
     <div className="fgp-tab-content">
       <div className="fgp-stats-grid">
@@ -109,6 +113,32 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
 
       <div className="fgp-section">
         <div className="fgp-section-header">
+          <h3>Platforms</h3>
+        </div>
+        <div className="fgp-platform-stats">
+          <div className="fgp-platform-stat" style={{ borderColor: '#1877f2' }}>
+            <div className="fgp-platform-icon" style={{ background: '#1877f2' }}>
+              FB
+            </div>
+            <div>{fbLists} lists</div>
+          </div>
+          <div className="fgp-platform-stat" style={{ borderColor: '#25d366' }}>
+            <div className="fgp-platform-icon" style={{ background: '#25d366' }}>
+              WA
+            </div>
+            <div>{waLists} lists</div>
+          </div>
+          <div className="fgp-platform-stat" style={{ borderColor: '#0084ff' }}>
+            <div className="fgp-platform-icon" style={{ background: '#0084ff' }}>
+              MS
+            </div>
+            <div>{msLists} lists</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="fgp-section">
+        <div className="fgp-section-header">
           <h3>Quick Actions</h3>
         </div>
         <div className="fgp-action-buttons">
@@ -117,6 +147,18 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
             onClick={() => chrome.tabs.create({ url: 'https://facebook.com' })}
           >
             <Send size={18} /> Open Facebook
+          </button>
+          <button
+            className="fgp-btn fgp-btn-secondary"
+            onClick={() => chrome.tabs.create({ url: 'https://web.whatsapp.com' })}
+          >
+            <Send size={18} /> Open WhatsApp
+          </button>
+          <button
+            className="fgp-btn fgp-btn-secondary"
+            onClick={() => chrome.tabs.create({ url: 'https://messenger.com' })}
+          >
+            <Send size={18} /> Open Messenger
           </button>
           <button
             className="fgp-btn fgp-btn-secondary"
@@ -165,21 +207,48 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
 }
 
 function ListsTab({ state }: { state: PopupState }) {
+  const [filterPlatform, setFilterPlatform] = useState<GroupList['platform'] | 'all'>('all');
+
+  const filteredLists =
+    filterPlatform === 'all'
+      ? state.groupLists
+      : state.groupLists.filter(l => l.platform === filterPlatform);
+
+  const platformColors: Record<string, string> = {
+    facebook: '#1877f2',
+    whatsapp: '#25d366',
+    messenger: '#0084ff',
+  };
+
   return (
     <div className="fgp-tab-content">
       <div className="fgp-section-header">
         <h3>Group Lists</h3>
-        <button
-          className="fgp-btn fgp-btn-sm fgp-btn-primary"
-          onClick={() => chrome.runtime.openOptionsPage()}
-        >
-          <Plus size={16} /> New List
-        </button>
+        <div className="fgp-filter-row">
+          <select
+            value={filterPlatform}
+            onChange={e => setFilterPlatform(e.target.value as GroupList['platform'] | 'all')}
+            className="fgp-select fgp-select-sm"
+          >
+            <option value="all">All Platforms</option>
+            <option value="facebook">Facebook</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="messenger">Messenger</option>
+          </select>
+          <button
+            className="fgp-btn fgp-btn-sm fgp-btn-primary"
+            onClick={() => chrome.runtime.openOptionsPage()}
+          >
+            <Plus size={16} /> New List
+          </button>
+        </div>
       </div>
-      {state.groupLists.length === 0 ? (
+      {filteredLists.length === 0 ? (
         <div className="fgp-empty-state">
           <Users size={48} />
-          <p>No group lists yet</p>
+          <p>
+            {filterPlatform === 'all' ? 'No group lists yet' : `No ${filterPlatform} lists yet`}
+          </p>
           <button
             className="fgp-btn fgp-btn-primary"
             onClick={() => chrome.runtime.openOptionsPage()}
@@ -189,11 +258,21 @@ function ListsTab({ state }: { state: PopupState }) {
         </div>
       ) : (
         <div className="fgp-list-grid">
-          {state.groupLists.map(list => (
+          {filteredLists.map(list => (
             <div key={list.id} className="fgp-list-card" style={{ borderColor: list.color }}>
               <div className="fgp-list-header" style={{ background: list.color }}>
                 <span>{list.name}</span>
                 <span className="fgp-list-count">{list.groupIds.length} groups</span>
+              </div>
+              <div
+                className="fgp-list-platform"
+                style={{ color: platformColors[list.platform] || '#666' }}
+              >
+                {list.platform === 'facebook'
+                  ? 'Facebook'
+                  : list.platform === 'whatsapp'
+                    ? 'WhatsApp'
+                    : 'Messenger'}
               </div>
               <div className="fgp-list-actions">
                 <button className="fgp-btn-icon" title="Share to this list">

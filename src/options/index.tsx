@@ -42,6 +42,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function getPlatformColor(platform: string): string {
+  switch (platform) {
+    case 'facebook':
+      return '#1877f2';
+    case 'whatsapp':
+      return '#25d366';
+    case 'messenger':
+      return '#0084ff';
+    default:
+      return '#666';
+  }
+}
+
 function collectionValues(value: unknown): unknown[] {
   return isRecord(value) ? Object.values(value) : [];
 }
@@ -463,6 +476,7 @@ function ListsTab({
 }: ListsTabProps) {
   const [newListName, setNewListName] = useState('');
   const [newListColor, setNewListColor] = useState<string>(COLORS[0]);
+  const [newListPlatform, setNewListPlatform] = useState<GroupList['platform']>('facebook');
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -473,13 +487,14 @@ function ListsTab({
       name: newListName.trim(),
       groupIds: selectedGroupIds,
       color: newListColor,
-      platform: 'facebook' as const,
+      platform: newListPlatform,
       createdAt: editingList?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
     onSave(list);
     setNewListName('');
     setSelectedGroupIds([]);
+    setNewListPlatform('facebook');
   };
 
   return (
@@ -514,11 +529,14 @@ function ListsTab({
           setNewListName={setNewListName}
           newListColor={newListColor}
           setNewListColor={setNewListColor}
+          newListPlatform={newListPlatform}
+          setNewListPlatform={setNewListPlatform}
           onSubmit={handleSubmit}
           onCancel={() => {
             setEditingList(undefined);
             setNewListName('');
             setSelectedGroupIds([]);
+            setNewListPlatform('facebook');
           }}
         />
       ) : (
@@ -609,6 +627,8 @@ interface ListFormProps {
   setNewListName: (name: string) => void;
   newListColor: string;
   setNewListColor: (color: string) => void;
+  newListPlatform: GroupList['platform'];
+  setNewListPlatform: (p: GroupList['platform']) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
 }
@@ -622,12 +642,16 @@ function ListForm({
   setNewListName,
   newListColor,
   setNewListColor,
+  newListPlatform,
+  setNewListPlatform,
   onSubmit,
   onCancel,
 }: ListFormProps) {
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setNewListName(sanitizeGroupName(e.target.value));
   };
+
+  const platformGroups = groups.filter(g => g.platform === newListPlatform);
 
   return (
     <form className="fgp-form" onSubmit={onSubmit}>
@@ -640,6 +664,18 @@ function ListForm({
           placeholder="My Group List"
           required
         />
+      </div>
+      <div className="fgp-form-row">
+        <label>Platform</label>
+        <select
+          value={newListPlatform}
+          onChange={e => setNewListPlatform(e.target.value as GroupList['platform'])}
+          className="fgp-select"
+        >
+          <option value="facebook">Facebook Groups</option>
+          <option value="whatsapp">WhatsApp Groups</option>
+          <option value="messenger">Messenger Groups</option>
+        </select>
       </div>
       <div className="fgp-form-row">
         <label>Color</label>
@@ -658,7 +694,7 @@ function ListForm({
       <div className="fgp-form-row">
         <label>Groups ({selectedGroupIds.length} selected)</label>
         <div className="fgp-group-multi-select">
-          {groups.map(group => (
+          {platformGroups.map(group => (
             <label key={group.id} className="fgp-checkbox-label">
               <input
                 type="checkbox"
@@ -705,24 +741,82 @@ function GroupsTab({
   syncing,
   onSync,
 }: GroupsTabProps) {
+  const [syncPlatform, setSyncPlatform] = useState<Group['platform']>('facebook');
+
+  const handleSync = async () => {
+    if (syncPlatform === 'facebook') {
+      onSync();
+    } else if (syncPlatform === 'whatsapp') {
+      setSyncing(true);
+      try {
+        const result = await chrome.runtime.sendMessage({ type: 'SYNC_WHATSAPP_GROUPS' });
+        if (result.success && result.groups) {
+          alert(`Found ${result.groups.length} WhatsApp groups!`);
+          loadAllData();
+        } else {
+          alert("Failed to sync WhatsApp groups. Make sure you're on web.whatsapp.com.");
+        }
+      } catch (error) {
+        alert('Sync failed: ' + error);
+      }
+      setSyncing(false);
+    } else if (syncPlatform === 'messenger') {
+      setSyncing(true);
+      try {
+        const result = await chrome.runtime.sendMessage({ type: 'SYNC_MESSENGER_GROUPS' });
+        if (result.success && result.groups) {
+          alert(`Found ${result.groups.length} Messenger groups!`);
+          loadAllData();
+        } else {
+          alert("Failed to sync Messenger groups. Make sure you're on messenger.com.");
+        }
+      } catch (error) {
+        alert('Sync failed: ' + error);
+      }
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="fgp-tab-panel">
       <div className="fgp-panel-header">
         <h2>Groups</h2>
-        <button className="fgp-btn fgp-btn-primary" onClick={onSync} disabled={syncing}>
-          {syncing ? (
-            <>
-              <div className="fgp-spinner" /> Syncing...
-            </>
-          ) : (
-            <>
-              <Users size={18} /> Sync from Facebook
-            </>
-          )}
-        </button>
+        <div className="fgp-sync-controls">
+          <select
+            value={syncPlatform}
+            onChange={e => setSyncPlatform(e.target.value as Group['platform'])}
+            className="fgp-select fgp-select-sm"
+            disabled={syncing}
+          >
+            <option value="facebook">Facebook Groups</option>
+            <option value="whatsapp">WhatsApp Groups</option>
+            <option value="messenger">Messenger Groups</option>
+          </select>
+          <button className="fgp-btn fgp-btn-primary" onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <>
+                <div className="fgp-spinner" /> Syncing...
+              </>
+            ) : (
+              <>
+                <Users size={18} /> Sync{' '}
+                {syncPlatform === 'facebook'
+                  ? 'Facebook'
+                  : syncPlatform === 'whatsapp'
+                    ? 'WhatsApp'
+                    : 'Messenger'}{' '}
+                Groups
+              </>
+            )}
+          </button>
+        </div>
       </div>
       <p className="fgp-hint">
-        Open Facebook in another tab, go to your Groups page, then click Sync to import your groups.
+        {syncPlatform === 'facebook'
+          ? 'Open Facebook in another tab, go to your Groups page, then click Sync to import your groups.'
+          : syncPlatform === 'whatsapp'
+            ? 'Open WhatsApp Web in another tab, go to your Chats/Groups, then click Sync to import your groups.'
+            : 'Open Messenger in another tab, go to your conversations, then click Sync to import your groups.'}
       </p>
       <div className="fgp-search">
         <Search size={18} />
@@ -744,40 +838,68 @@ function GroupsTab({
             </tr>
           </thead>
           <tbody>
-            {groups.map(group => (
-              <tr key={group.id}>
-                <td>
-                  <a href={group.url} target="_blank" rel="noopener">
-                    {group.name}
-                  </a>
-                </td>
-                <td>{group.memberCount ? group.memberCount.toLocaleString() : '—'}</td>
-                <td>
-                  {groupLists
-                    .filter(l => l.groupIds.includes(group.id))
-                    .map(l => (
-                      <span
-                        key={l.id}
-                        className="fgp-group-tag"
-                        style={{ background: l.color + '20', color: l.color }}
-                      >
-                        {l.name}
-                      </span>
-                    ))}
-                </td>
-                <td>
-                  {group.lastPostedAt ? new Date(group.lastPostedAt).toLocaleDateString() : 'Never'}
-                </td>
-              </tr>
-            ))}
+            {groups
+              .filter(g => g.platform === syncPlatform)
+              .map(group => (
+                <tr key={group.id}>
+                  <td>
+                    <a href={group.url} target="_blank" rel="noopener">
+                      {group.name}
+                    </a>
+                  </td>
+                  <td>{group.memberCount ? group.memberCount.toLocaleString() : '—'}</td>
+                  <td>
+                    <span
+                      className="fgp-platform-badge"
+                      style={{ background: getPlatformColor(group.platform) }}
+                    >
+                      {group.platform === 'facebook'
+                        ? 'FB'
+                        : group.platform === 'whatsapp'
+                          ? 'WA'
+                          : 'MS'}
+                    </span>
+                    {groupLists
+                      .filter(l => l.groupIds.includes(group.id))
+                      .map(l => (
+                        <span
+                          key={l.id}
+                          className="fgp-group-tag"
+                          style={{ background: l.color + '20', color: l.color }}
+                        >
+                          {l.name}
+                        </span>
+                      ))}
+                  </td>
+                  <td>
+                    {group.lastPostedAt
+                      ? new Date(group.lastPostedAt).toLocaleDateString()
+                      : 'Never'}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
-        {groups.length === 0 && (
+        {groups.filter(g => g.platform === syncPlatform).length === 0 && (
           <div className="fgp-empty-state">
             <Users size={48} />
-            <p>No groups yet</p>
-            <button className="fgp-btn fgp-btn-primary" onClick={onSync} disabled={syncing}>
-              Sync from Facebook
+            <p>
+              No{' '}
+              {syncPlatform === 'facebook'
+                ? 'Facebook'
+                : syncPlatform === 'whatsapp'
+                  ? 'WhatsApp'
+                  : 'Messenger'}{' '}
+              groups yet
+            </p>
+            <button className="fgp-btn fgp-btn-primary" onClick={handleSync} disabled={syncing}>
+              Sync{' '}
+              {syncPlatform === 'facebook'
+                ? 'Facebook'
+                : syncPlatform === 'whatsapp'
+                  ? 'WhatsApp'
+                  : 'Messenger'}{' '}
+              Groups
             </button>
           </div>
         )}

@@ -545,6 +545,462 @@ body {
   margin-bottom: 16px;
 }
 
+.fgp-sync-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.fgp-select-sm {
+  padding: 8px 12px;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.fgp-platform-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  color: white;
+  margin-right: 8px;
+}
+
+.fgp-platform-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fgp-platform-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 20px;
+  border: 2px solid;
+  border-radius: 12px;
+  background: var(--fgp-surface);
+  min-width: 80px;
+}
+
+.fgp-platform-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+}
+
+.fgp-platform-stat div:last-child {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fgp-text-secondary);
+}
+
+.fgp-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fgp-list-platform {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--fgp-bg);
+  margin-top: 4px;
+}
+
+.fgp-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fgp-section-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fgp-text);
+}
+
+.fgp-action-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fgp-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.fgp-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--fgp-surface);
+  border: 1px solid var(--fgp-border);
+  border-radius: var(--fgp-radius);
+}
+
+.fgp-stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fgp-stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.fgp-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--fgp-text);
+  line-height: 1;
+}
+
+.fgp-stat-label {
+  font-size: 12px;
+  color: var(--fgp-text-secondary);
+  margin-top: 2px;
+}
+
+.fgp-section {
+  background: var(--fgp-surface);
+  border: 1px solid var(--fgp-border);
+  border-radius: var(--fgp-radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.fgp-running-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fgp-running-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  background: var(--fgp-bg);
+  border-radius: 10px;
+}
+
+.fgp-running-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fgp-running-title {
+  font-weight: 600;
+  color: var(--fgp-text);
+  font-size: 13px;
+}
+
+.fgp-running-meta {
+  font-size: 12px;
+  color: var(--fgp-text-secondary);
+  margin-top: 2px;
+}
+
+.fgp-progress-bar {
+  width: 120px;
+  height: 6px;
+  background: var(--fgp-border);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.fgp-progress-fill {
+  height: 100%;
+  background: var(--fgp-primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.fgp-scheduled-list,
+.fgp-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fgp-scheduled-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  background: var(--fgp-surface);
+  border: 1px solid var(--fgp-border);
+  border-radius: 10px;
+  gap: 12px;
+}
+
+.fgp-scheduled-item.running {
+  border-color: #ffd600;
+  background: #fffde7;
+}
+
+.fgp-scheduled-item.pending {
+  border-color: var(--fgp-border);
+}
+
+.fgp-scheduled-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fgp-scheduled-title {
+  font-weight: 600;
+  color: var(--fgp-text);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fgp-scheduled-meta {
+  font-size: 12px;
+  color: var(--fgp-text-secondary);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fgp-scheduled-actions {
+  flex-shrink: 0;
+}
+
+.fgp-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--fgp-surface);
+  border: 1px solid var(--fgp-border);
+  border-radius: 10px;
+}
+
+.fgp-history-item.success {
+  border-left: 3px solid var(--fgp-success);
+}
+
+.fgp-history-item.failed {
+  border-left: 3px solid var(--fgp-danger);
+}
+
+.fgp-history-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fgp-history-icon.success {
+  background: #e8f5e9;
+  color: var(--fgp-success);
+}
+
+.fgp-history-icon.failed {
+  background: #fce4ec;
+  color: var(--fgp-danger);
+}
+
+.fgp-history-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fgp-history-title {
+  font-weight: 600;
+  color: var(--fgp-text);
+  font-size: 13px;
+}
+
+.fgp-history-meta {
+  font-size: 12px;
+  color: var(--fgp-text-secondary);
+  margin-top: 2px;
+}
+
+.fgp-tab-content {
+  animation: fgp-fade-in 0.2s ease;
+}
+
+.fgp-tab-bar {
+  display: flex;
+  background: var(--fgp-surface);
+  border-bottom: 1px solid var(--fgp-border);
+  overflow-x: auto;
+}
+
+.fgp-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  color: var(--fgp-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--fgp-transition);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.fgp-tab:hover {
+  color: var(--fgp-text);
+  background: var(--fgp-bg);
+}
+
+.fgp-tab.active {
+  color: var(--fgp-primary);
+  border-bottom-color: var(--fgp-primary);
+}
+
+.fgp-popup {
+  width: 380px;
+  min-height: 400px;
+  background: var(--fgp-bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.fgp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--fgp-surface);
+  border-bottom: 1px solid var(--fgp-border);
+}
+
+.fgp-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fgp-logo svg {
+  color: var(--fgp-primary);
+}
+
+.fgp-logo span {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fgp-text);
+}
+
+.fgp-version {
+  font-size: 11px;
+  color: var(--fgp-text-secondary);
+  background: var(--fgp-bg);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.fgp-content {
+  padding: 16px 20px;
+  overflow-y: auto;
+  max-height: 500px;
+}
+
+.fgp-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--fgp-text-secondary);
+}
+
+.fgp-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--fgp-border);
+}
+
+.fgp-setting-row:last-child {
+  border-bottom: none;
+}
+
+.fgp-setting-row label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fgp-text);
+}
+
+.fgp-setting-row select {
+  padding: 8px 12px;
+  border: 2px solid var(--fgp-border);
+  border-radius: 8px;
+  background: var(--fgp-bg);
+  color: var(--fgp-text);
+  font-size: 13px;
+}
+
+.fgp-setting-row input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--fgp-primary);
+}
+
+.fgp-select {
+  padding: 8px 12px;
+  border: 2px solid var(--fgp-border);
+  border-radius: 8px;
+  background: var(--fgp-bg);
+  color: var(--fgp-text);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.fgp-about {
+  font-size: 13px;
+  color: var(--fgp-text-secondary);
+  line-height: 1.6;
+}
+
+.fgp-about a {
+  color: var(--fgp-primary);
+  text-decoration: none;
+}
+
+.fgp-about a:hover {
+  text-decoration: underline;
+}
+
 .fgp-group-table {
   background: var(--fgp-surface);
   border: 1px solid var(--fgp-border);
