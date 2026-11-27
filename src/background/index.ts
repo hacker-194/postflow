@@ -1008,9 +1008,10 @@ function extractPlatformGroupRows(
 
       const link = row.querySelector<HTMLAnchorElement>('a[href]');
       const href = link?.getAttribute('href') || '';
+      // data-testid usually identifies a row type, not an individual conversation.
+      // Use an actual thread identifier when available; otherwise fall back to the name.
       const rowKey =
         row.getAttribute('data-id') ||
-        row.getAttribute('data-testid') ||
         href ||
         name.toLocaleLowerCase();
       const id = (platform === 'whatsapp' ? 'wa_' : 'ms_') +
