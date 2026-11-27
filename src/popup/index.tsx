@@ -563,7 +563,7 @@ function App() {
         ]);
       setState(s => ({
         ...s,
-        groupLists: groupLists || [],
+        groupLists: Array.isArray(groupLists) ? groupLists : Object.values(groupLists || {}),
         scheduledShares: isScheduledShareArray(scheduledShares)
           ? scheduledShares
           : Object.values(scheduledShares || {}),
