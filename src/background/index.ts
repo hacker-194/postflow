@@ -688,9 +688,7 @@ async function handleCancelShare(shareId: string): Promise<{ success: boolean }>
   return { success: false };
 }
 
-async function handleSyncGroups(
-  tabId?: number
-): Promise<{
+async function handleSyncGroups(tabId?: number): Promise<{
   success: boolean;
   groups?: Array<{ id: string; name: string; url: string; memberCount?: number }>;
   error?: string;
@@ -748,9 +746,7 @@ function extractGroupsFromPage(): Array<{
   return groups;
 }
 
-async function handleSyncWhatsAppGroups(
-  tabId?: number
-): Promise<{
+async function handleSyncWhatsAppGroups(tabId?: number): Promise<{
   success: boolean;
   groups?: Array<{ id: string; name: string; url?: string }>;
   error?: string;
@@ -786,9 +782,7 @@ async function handleSyncWhatsAppGroups(
   });
 }
 
-async function handleSyncMessengerGroups(
-  tabId?: number
-): Promise<{
+async function handleSyncMessengerGroups(tabId?: number): Promise<{
   success: boolean;
   groups?: Array<{ id: string; name: string; url?: string }>;
   error?: string;
