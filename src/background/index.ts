@@ -964,6 +964,7 @@ function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?
     '[role="listitem"]',
     '[data-testid="chat-list-item"]',
     '[data-testid="cell-frame-container"]',
+    '[data-testid="conversation-list-item"]',
     'div[role="row"]',
     '._ak8l',
     '._ak8o',
@@ -972,19 +973,31 @@ function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?
     '.x1yztbdb',
     '.x1n2onr6',
     '[aria-label*="Chat"]',
+    '#pane-side [role="listitem"]',
+    '#pane-side div[role="row"]',
   ];
 
   const nameSelectors = [
     '[dir="auto"]',
     '[data-testid="cell-frame-title"]',
     '[data-testid="contact-name"]',
+    '[data-testid="conversation-title"]',
     '._ao3e',
-    '.x1iyjqo2',
     '.x1iyjqo2',
     'span[title]',
     'span[dir="auto"]',
     'div[dir="auto"]',
+    'span[aria-label]',
   ];
+
+  // Debug: log all selector matches
+  console.log('[FGP] WhatsApp: Starting group extraction');
+  for (const chatSel of chatSelectors) {
+    const chatItems = document.querySelectorAll(chatSel);
+    if (chatItems.length > 0) {
+      console.log(`[FGP] WhatsApp: Selector "${chatSel}" matched ${chatItems.length} elements`);
+    }
+  }
 
   for (const chatSel of chatSelectors) {
     const chatItems = document.querySelectorAll(chatSel);
@@ -1018,6 +1031,7 @@ function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?
     if (groups.length > 0) break;
   }
 
+  console.log(`[FGP] WhatsApp: Found ${groups.length} groups`, groups);
   return groups;
 }
 
@@ -1029,24 +1043,37 @@ function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url
     '[role="listitem"]',
     '[data-testid="thread-list-item"]',
     '[data-testid="cell-frame-container"]',
+    '[data-testid="conversation-list-item"]',
     'div[role="row"]',
     '.x1yztbdb',
     '.x1n2onr6',
     '.x78zum5',
     '.x1q0g3np',
     '[aria-label*="Conversation"]',
+    '[data-pagelet*="Messenger"] [role="listitem"]',
   ];
 
   const nameSelectors = [
     '[role="heading"]',
     '[data-testid="thread-name"]',
     '[data-testid="cell-frame-title"]',
+    '[data-testid="conversation-name"]',
     'strong',
     '.x1lliihq',
     '[dir="auto"]',
     'span[dir="auto"]',
     'div[dir="auto"]',
+    'span[aria-label]',
   ];
+
+  // Debug: log all selector matches
+  console.log('[FGP] Messenger: Starting group extraction');
+  for (const chatSel of chatSelectors) {
+    const chatItems = document.querySelectorAll(chatSel);
+    if (chatItems.length > 0) {
+      console.log(`[FGP] Messenger: Selector "${chatSel}" matched ${chatItems.length} elements`);
+    }
+  }
 
   for (const chatSel of chatSelectors) {
     const chatItems = document.querySelectorAll(chatSel);
@@ -1077,6 +1104,7 @@ function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url
     if (groups.length > 0) break;
   }
 
+  console.log(`[FGP] Messenger: Found ${groups.length} groups`, groups);
   return groups;
 }
 
