@@ -73,5 +73,5 @@ class Logger {
 export const logger = new Logger();
 
 if (typeof window !== 'undefined') {
-  (window as any).__FGP_LOGGER__ = logger;
+  (window as Window & Record<string, unknown>).__FGP_LOGGER__ = logger;
 }

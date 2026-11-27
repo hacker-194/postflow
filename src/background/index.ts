@@ -690,7 +690,11 @@ async function handleCancelShare(shareId: string): Promise<{ success: boolean }>
 
 async function handleSyncGroups(
   tabId?: number
-): Promise<{ success: boolean; groups?: any[]; error?: string }> {
+): Promise<{
+  success: boolean;
+  groups?: Array<{ id: string; name: string; url: string; memberCount?: number }>;
+  error?: string;
+}> {
   if (!tabId) {
     const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
     if (tabs[0]?.id) tabId = tabs[0].id;
@@ -746,7 +750,11 @@ function extractGroupsFromPage(): Array<{
 
 async function handleSyncWhatsAppGroups(
   tabId?: number
-): Promise<{ success: boolean; groups?: any[]; error?: string }> {
+): Promise<{
+  success: boolean;
+  groups?: Array<{ id: string; name: string; url?: string }>;
+  error?: string;
+}> {
   if (!tabId) {
     const tabs = await chrome.tabs.query({ url: '*://web.whatsapp.com/*' });
     if (tabs[0]?.id) tabId = tabs[0].id;
@@ -780,7 +788,11 @@ async function handleSyncWhatsAppGroups(
 
 async function handleSyncMessengerGroups(
   tabId?: number
-): Promise<{ success: boolean; groups?: any[]; error?: string }> {
+): Promise<{
+  success: boolean;
+  groups?: Array<{ id: string; name: string; url?: string }>;
+  error?: string;
+}> {
   if (!tabId) {
     const tabs = await chrome.tabs.query({ url: '*://www.messenger.com/*' });
     if (tabs[0]?.id) tabId = tabs[0].id;

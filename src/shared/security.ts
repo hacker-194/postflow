@@ -1,3 +1,5 @@
+import type { ShareSettings, GroupList, Template, ImageSet } from './types';
+
 export function sanitizeHtml(input: string): string {
   const div = document.createElement('div');
   div.textContent = input;
@@ -166,82 +168,88 @@ export function validateFacebookUrl(input: string): boolean {
   }
 }
 
-export function sanitizeSettings(input: any): any {
-  const sanitized: any = {};
-  if (input.mode && ['share_original', 'repost_content'].includes(input.mode)) {
-    sanitized.mode = input.mode;
+export function sanitizeSettings(input: unknown): Partial<ShareSettings> {
+  const sanitized: Partial<ShareSettings> = {};
+  const obj = input as Record<string, unknown>;
+  if (obj.mode && ['share_original', 'repost_content'].includes(obj.mode as string)) {
+    sanitized.mode = obj.mode as ShareSettings['mode'];
   }
-  if (typeof input.caption === 'string') {
-    sanitized.caption = sanitizeCaption(input.caption);
+  if (typeof obj.caption === 'string') {
+    sanitized.caption = sanitizeCaption(obj.caption);
   }
-  if (typeof input.firstComment === 'string') {
-    sanitized.firstComment = sanitizeComment(input.firstComment);
+  if (typeof obj.firstComment === 'string') {
+    sanitized.firstComment = sanitizeComment(obj.firstComment);
   }
-  if (typeof input.useSpintax === 'boolean') {
-    sanitized.useSpintax = input.useSpintax;
+  if (typeof obj.useSpintax === 'boolean') {
+    sanitized.useSpintax = obj.useSpintax;
   }
-  if (typeof input.delayBetweenGroups === 'number') {
-    sanitized.delayBetweenGroups = Math.max(5000, Math.min(input.delayBetweenGroups, 3600000));
+  if (typeof obj.delayBetweenGroups === 'number') {
+    sanitized.delayBetweenGroups = Math.max(5000, Math.min(obj.delayBetweenGroups, 3600000));
   }
-  if (input.safetyLevel && ['fast', 'balanced', 'safe'].includes(input.safetyLevel)) {
-    sanitized.safetyLevel = input.safetyLevel;
+  if (obj.safetyLevel && ['fast', 'balanced', 'safe'].includes(obj.safetyLevel as string)) {
+    sanitized.safetyLevel = obj.safetyLevel as ShareSettings['safetyLevel'];
   }
-  if (typeof input.overnightPause === 'boolean') {
-    sanitized.overnightPause = input.overnightPause;
+  if (typeof obj.overnightPause === 'boolean') {
+    sanitized.overnightPause = obj.overnightPause;
   }
-  if (typeof input.overnightStart === 'string' && /^\d{2}:\d{2}$/.test(input.overnightStart)) {
-    sanitized.overnightStart = input.overnightStart;
+  if (typeof obj.overnightStart === 'string' && /^\d{2}:\d{2}$/.test(obj.overnightStart)) {
+    sanitized.overnightStart = obj.overnightStart;
   }
-  if (typeof input.overnightEnd === 'string' && /^\d{2}:\d{2}$/.test(input.overnightEnd)) {
-    sanitized.overnightEnd = input.overnightEnd;
+  if (typeof obj.overnightEnd === 'string' && /^\d{2}:\d{2}$/.test(obj.overnightEnd)) {
+    sanitized.overnightEnd = obj.overnightEnd;
   }
   if (
-    typeof input.maxPostsPerDay === 'number' &&
-    input.maxPostsPerDay >= 1 &&
-    input.maxPostsPerDay <= 500
+    typeof obj.maxPostsPerDay === 'number' &&
+    obj.maxPostsPerDay >= 1 &&
+    obj.maxPostsPerDay <= 500
   ) {
-    sanitized.maxPostsPerDay = input.maxPostsPerDay;
+    sanitized.maxPostsPerDay = obj.maxPostsPerDay;
   }
   return sanitized;
 }
 
-export function sanitizeGroupList(input: any): any {
-  const sanitized: any = {};
-  if (typeof input.name === 'string') {
-    sanitized.name = sanitizeGroupName(input.name);
+export function sanitizeGroupList(input: unknown): Partial<GroupList> {
+  const sanitized: Partial<GroupList> = {};
+  const obj = input as Record<string, unknown>;
+  if (typeof obj.name === 'string') {
+    sanitized.name = sanitizeGroupName(obj.name);
   }
-  if (Array.isArray(input.groupIds)) {
-    sanitized.groupIds = input.groupIds.filter((id: string) => validateGroupId(id)).slice(0, 500);
+  if (Array.isArray(obj.groupIds)) {
+    sanitized.groupIds = obj.groupIds
+      .filter((id): id is string => typeof id === 'string' && validateGroupId(id))
+      .slice(0, 500);
   }
-  if (typeof input.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(input.color)) {
-    sanitized.color = input.color;
+  if (typeof obj.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(obj.color)) {
+    sanitized.color = obj.color;
   }
   return sanitized;
 }
 
-export function sanitizeTemplate(input: any): any {
-  const sanitized: any = {};
-  if (typeof input.name === 'string') {
-    sanitized.name = sanitizeTemplateName(input.name);
+export function sanitizeTemplate(input: unknown): Partial<Template> {
+  const sanitized: Partial<Template> = {};
+  const obj = input as Record<string, unknown>;
+  if (typeof obj.name === 'string') {
+    sanitized.name = sanitizeTemplateName(obj.name);
   }
-  if (typeof input.caption === 'string') {
-    sanitized.caption = sanitizeCaption(input.caption);
+  if (typeof obj.caption === 'string') {
+    sanitized.caption = sanitizeCaption(obj.caption);
   }
-  if (typeof input.firstComment === 'string') {
-    sanitized.firstComment = sanitizeComment(input.firstComment);
+  if (typeof obj.firstComment === 'string') {
+    sanitized.firstComment = sanitizeComment(obj.firstComment);
   }
-  sanitized.settings = sanitizeSettings(input.settings || {});
+  sanitized.settings = sanitizeSettings(obj.settings ?? {});
   return sanitized;
 }
 
-export function sanitizeImageSet(input: any): any {
-  const sanitized: any = {};
-  if (typeof input.name === 'string') {
-    sanitized.name = sanitizeImageSetName(input.name);
+export function sanitizeImageSet(input: unknown): Partial<ImageSet> {
+  const sanitized: Partial<ImageSet> = {};
+  const obj = input as Record<string, unknown>;
+  if (typeof obj.name === 'string') {
+    sanitized.name = sanitizeImageSetName(obj.name);
   }
-  if (Array.isArray(input.imageUrls)) {
-    sanitized.imageUrls = input.imageUrls
-      .filter((url: string) => validateImageUrl(url))
+  if (Array.isArray(obj.imageUrls)) {
+    sanitized.imageUrls = obj.imageUrls
+      .filter((url): url is string => typeof url === 'string' && validateImageUrl(url))
       .slice(0, 50);
   }
   return sanitized;
@@ -249,12 +257,12 @@ export function sanitizeImageSet(input: any): any {
 
 export function createSecureMessageHandler<T extends { type: string }>(
   validTypes: string[],
-  handler: (message: T, sender: chrome.runtime.MessageSender) => Promise<any>
+  handler: (message: T, sender: chrome.runtime.MessageSender) => Promise<unknown>
 ) {
   return async (
     message: T,
     sender: chrome.runtime.MessageSender,
-    sendResponse: (response: any) => void
+    sendResponse: (response: unknown) => void
   ) => {
     if (!message || !message.type) {
       sendResponse({ success: false, error: 'Invalid message format' });

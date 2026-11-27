@@ -33,13 +33,13 @@ function makeKey(namespace: string, id?: string): string {
   return id ? `${PREFIX}/${namespace}/${id}` : `${PREFIX}/${namespace}`;
 }
 
-export async function get<T = any>(namespace: string, id?: string): Promise<T | undefined> {
+export async function get<T = unknown>(namespace: string, id?: string): Promise<T | undefined> {
   const db = await getDB();
   const key = makeKey(namespace, id);
   return db.get(STORE_NAME, key) as Promise<T | undefined>;
 }
 
-export async function getAll<T = any>(namespace: string): Promise<Record<string, T>> {
+export async function getAll<T = unknown>(namespace: string): Promise<Record<string, T>> {
   const db = await getDB();
   const namespacePrefix = `${makeKey(namespace)}/`;
   const keys = await db.getAllKeys(STORE_NAME);
@@ -67,7 +67,7 @@ export async function set(namespace: string, value: unknown, id?: string): Promi
   const current = await db.get(STORE_NAME, key);
   const newValue =
     typeof value === 'function' ? (value as (prev: unknown) => unknown)(current) : value;
-  await db.put(STORE_NAME, newValue as any, key);
+  await db.put(STORE_NAME, newValue as FGPStorage[typeof STORE_NAME]['value'], key);
 }
 
 export async function del(namespace: string, id: string): Promise<void> {

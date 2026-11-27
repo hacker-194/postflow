@@ -878,7 +878,7 @@ function TemplatesTab({
             <label>Share Mode</label>
             <select
               value={formData.mode}
-              onChange={e => setFormData({ ...formData, mode: e.target.value as any })}
+              onChange={e => setFormData({ ...formData, mode: e.target.value as ShareMode })}
             >
               <option value="share_original">Share the post (keeps author)</option>
               <option value="repost_content">Post as me (new post)</option>
@@ -1108,7 +1108,7 @@ interface SettingsTabProps {
 }
 
 function SettingsTab({ settings, setSettings }: SettingsTabProps) {
-  const handleChange = (key: keyof UserSettings, value: any) => {
+  const handleChange = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     setSettings({ ...settings, [key]: value });
     chrome.runtime.sendMessage({ type: 'UPDATE_USER_SETTINGS', settings: { [key]: value } });
   };

@@ -1,27 +1,45 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
-const mockEvent = (): chrome.events.Event<any> =>
-  ({
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    hasListener: vi.fn(),
-    getRules: vi.fn(),
-    hasRules: vi.fn(),
-    removeRules: vi.fn(),
-    addRules: vi.fn(),
-  }) as any;
+type MockEvent = {
+  addListener: ReturnType<typeof vi.fn>;
+  removeListener: ReturnType<typeof vi.fn>;
+  hasListener: ReturnType<typeof vi.fn>;
+  getRules: ReturnType<typeof vi.fn>;
+  hasRules: ReturnType<typeof vi.fn>;
+  removeRules: ReturnType<typeof vi.fn>;
+  addRules: ReturnType<typeof vi.fn>;
+};
 
-const mockStorageArea = (): chrome.storage.StorageArea =>
-  ({
-    get: vi.fn(),
-    set: vi.fn(),
-    remove: vi.fn(),
-    clear: vi.fn(),
-    getBytesInUse: vi.fn(),
-    setAccessLevel: vi.fn(),
-    onChanged: mockEvent(),
-  }) as any;
+type MockStorageArea = {
+  get: ReturnType<typeof vi.fn>;
+  set: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
+  clear: ReturnType<typeof vi.fn>;
+  getBytesInUse: ReturnType<typeof vi.fn>;
+  setAccessLevel: ReturnType<typeof vi.fn>;
+  onChanged: MockEvent;
+};
+
+const mockEvent = (): MockEvent => ({
+  addListener: vi.fn(),
+  removeListener: vi.fn(),
+  hasListener: vi.fn(),
+  getRules: vi.fn(),
+  hasRules: vi.fn(),
+  removeRules: vi.fn(),
+  addRules: vi.fn(),
+});
+
+const mockStorageArea = (): MockStorageArea => ({
+  get: vi.fn(),
+  set: vi.fn(),
+  remove: vi.fn(),
+  clear: vi.fn(),
+  getBytesInUse: vi.fn(),
+  setAccessLevel: vi.fn(),
+  onChanged: mockEvent(),
+});
 
 global.chrome = {
   runtime: {
@@ -148,7 +166,7 @@ global.chrome = {
     isEnabled: vi.fn(),
     openPopup: vi.fn(),
   },
-} as any;
+};
 
 global.HTMLElement.prototype.scrollIntoView = vi.fn();
 global.HTMLElement.prototype.focus = vi.fn();
