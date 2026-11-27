@@ -291,9 +291,12 @@ async function forwardToSelected(sheet: HTMLElement): Promise<void> {
   for (const contactId of selectedIds) {
     try {
       await forwardMessage(contactId, messageData);
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1500));
     } catch (error) {
       console.error('Failed to forward:', error);
+      alert(
+        `Failed to forward to ${contactId}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 }
@@ -310,15 +313,164 @@ async function forwardMessage(
   contactId: string,
   messageData: { text?: string; media?: boolean }
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { type: 'FORWARD_WHATSAPP_MESSAGE', contactId, messageData },
-      response => {
-        if (response?.success) resolve();
-        else reject(new Error(response?.error || 'Forward failed'));
+  // Extract the original contact name from the ID (format: wa_name_with_underscores)
+  const contactName = contactId.replace('wa_', '').replace(/_/g, ' ');
+
+  // Find the chat in the chat list
+  const chatElement = await findChatByName(contactName);
+  if (!chatElement) {
+    throw new Error(`Chat "${contactName}" not found in chat list`);
+  }
+
+  // Click the chat to open it
+  chatElement.click();
+  await sleep(800);
+
+  // Find and fill the message input
+  const messageInput = await findMessageInput();
+  if (!messageInput) {
+    throw new Error('Message input not found');
+  }
+
+  if (messageData.text) {
+    await typeMessage(messageInput, messageData.text);
+    await sleep(300);
+  }
+
+  // Find and click send button
+  const sendButton = await findSendButton();
+  if (!sendButton) {
+    throw new Error('Send button not found');
+  }
+
+  sendButton.click();
+  await sleep(500);
+}
+
+function findChatByName(name: string): Promise<HTMLElement | null> {
+  return new Promise(resolve => {
+    const search = () => {
+      // WhatsApp Web chat list items
+      const chatItems = document.querySelectorAll('[role="listitem"], ._ak8l, ._ak8o, .x1yztbdb');
+      for (const item of chatItems) {
+        const nameEl = item.querySelector(
+          '[dir="auto"], ._ao3e, .x1iyjqo2, span[title]'
+        ) as HTMLElement;
+        const itemName = nameEl?.textContent?.trim();
+        if (itemName && itemName.toLowerCase() === name.toLowerCase()) {
+          resolve(item as HTMLElement);
+          return;
+        }
       }
-    );
+      resolve(null);
+    };
+
+    search();
+
+    // If not found, wait for chat list to load
+    const observer = new MutationObserver(() => {
+      search();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Timeout after 10 seconds
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, 10000);
   });
+}
+
+function findMessageInput(): Promise<HTMLElement | null> {
+  return new Promise(resolve => {
+    const search = () => {
+      // WhatsApp Web message input selectors
+      const selectors = [
+        '[data-testid="conversation-compose-box-input"]',
+        '[contenteditable="true"][data-tab="10"]',
+        'div[contenteditable="true"][role="textbox"]',
+        'footer [contenteditable="true"]',
+        '[data-testid="compose-box-input"]',
+      ];
+
+      for (const selector of selectors) {
+        const input = document.querySelector(selector) as HTMLElement;
+        if (input) {
+          resolve(input);
+          return;
+        }
+      }
+      resolve(null);
+    };
+
+    search();
+
+    const observer = new MutationObserver(() => {
+      search();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, 5000);
+  });
+}
+
+async function typeMessage(input: HTMLElement, text: string): Promise<void> {
+  input.focus();
+  await sleep(100);
+
+  // Clear existing content
+  input.textContent = '';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await sleep(50);
+
+  // Type the message
+  input.textContent = text;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  await sleep(100);
+}
+
+function findSendButton(): Promise<HTMLElement | null> {
+  return new Promise(resolve => {
+    const search = () => {
+      const selectors = [
+        '[data-testid="compose-btn-send"]',
+        '[data-testid="send"]',
+        'button[aria-label="Send"]',
+        'span[data-icon="send"]',
+        'button:has(span[data-icon="send"])',
+        'footer button[type="submit"]',
+      ];
+
+      for (const selector of selectors) {
+        const btn = document.querySelector(selector) as HTMLElement;
+        if (btn && !btn.hasAttribute('disabled')) {
+          resolve(btn);
+          return;
+        }
+      }
+      resolve(null);
+    };
+
+    search();
+
+    const observer = new MutationObserver(() => {
+      search();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, 5000);
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 initialize();

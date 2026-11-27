@@ -287,9 +287,12 @@ async function shareToSelected(sheet: HTMLElement): Promise<void> {
   for (const groupId of selectedIds) {
     try {
       await shareMessage(groupId, messageData);
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 2000));
     } catch (error) {
       console.error('Failed to share:', error);
+      alert(
+        `Failed to share to ${groupId}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 }
@@ -306,15 +309,164 @@ async function shareMessage(
   groupId: string,
   messageData: { text?: string; media?: boolean }
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { type: 'SHARE_MESSENGER_MESSAGE', groupId, messageData },
-      response => {
-        if (response?.success) resolve();
-        else reject(new Error(response?.error || 'Share failed'));
+  // Extract the original group name from the ID (format: ms_name_with_underscores)
+  const groupName = groupId.replace('ms_', '').replace(/_/g, ' ');
+
+  // Find the group/conversation in the chat list
+  const chatElement = await findChatByName(groupName);
+  if (!chatElement) {
+    throw new Error(`Group "${groupName}" not found in chat list`);
+  }
+
+  // Click the chat to open it
+  chatElement.click();
+  await sleep(1000);
+
+  // Find and fill the message input
+  const messageInput = await findMessageInput();
+  if (!messageInput) {
+    throw new Error('Message input not found');
+  }
+
+  if (messageData.text) {
+    await typeMessage(messageInput, messageData.text);
+    await sleep(300);
+  }
+
+  // Find and click send button
+  const sendButton = await findSendButton();
+  if (!sendButton) {
+    throw new Error('Send button not found');
+  }
+
+  sendButton.click();
+  await sleep(500);
+}
+
+function findChatByName(name: string): Promise<HTMLElement | null> {
+  return new Promise(resolve => {
+    const search = () => {
+      // Messenger chat list items
+      const chatItems = document.querySelectorAll(
+        '[role="listitem"], .x1yztbdb, .x1n2onr6, [data-testid="thread-list-item"]'
+      );
+      for (const item of chatItems) {
+        const nameEl = item.querySelector(
+          '[role="heading"], strong, .x1lliihq, [dir="auto"], [data-testid="thread-name"]'
+        ) as HTMLElement;
+        const itemName = nameEl?.textContent?.trim();
+        if (itemName && itemName.toLowerCase() === name.toLowerCase()) {
+          resolve(item as HTMLElement);
+          return;
+        }
       }
-    );
+      resolve(null);
+    };
+
+    search();
+
+    const observer = new MutationObserver(() => {
+      search();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, 10000);
   });
+}
+
+function findMessageInput(): Promise<HTMLElement | null> {
+  return new Promise(resolve => {
+    const search = () => {
+      // Messenger message input selectors
+      const selectors = [
+        '[contenteditable="true"][data-testid="composer-input"]',
+        '[contenteditable="true"][aria-label*="Message" i]',
+        'div[contenteditable="true"][role="textbox"]',
+        '[data-testid="composer-input"]',
+        'div[contenteditable="true"]',
+      ];
+
+      for (const selector of selectors) {
+        const input = document.querySelector(selector) as HTMLElement;
+        if (input) {
+          resolve(input);
+          return;
+        }
+      }
+      resolve(null);
+    };
+
+    search();
+
+    const observer = new MutationObserver(() => {
+      search();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, 5000);
+  });
+}
+
+async function typeMessage(input: HTMLElement, text: string): Promise<void> {
+  input.focus();
+  await sleep(100);
+
+  // Clear existing content
+  input.textContent = '';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await sleep(50);
+
+  // Type the message
+  input.textContent = text;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  await sleep(100);
+}
+
+function findSendButton(): Promise<HTMLElement | null> {
+  return new Promise(resolve => {
+    const search = () => {
+      const selectors = [
+        '[data-testid="composer-send-button"]',
+        'button[aria-label="Send"]',
+        'div[aria-label="Send"]',
+        'button:has(svg[data-icon="send"])',
+        '[data-testid="send-button"]',
+        'div[role="button"][aria-label="Send"]',
+      ];
+
+      for (const selector of selectors) {
+        const btn = document.querySelector(selector) as HTMLElement;
+        if (btn && !btn.hasAttribute('disabled')) {
+          resolve(btn);
+          return;
+        }
+      }
+      resolve(null);
+    };
+
+    search();
+
+    const observer = new MutationObserver(() => {
+      search();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, 5000);
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 initialize();

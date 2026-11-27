@@ -443,8 +443,6 @@ const VALID_MESSAGE_TYPES = [
   'GET_WHATSAPP_GROUPS',
   'GET_MESSENGER_GROUPS',
   'GET_CURRENT_MESSAGE',
-  'FORWARD_WHATSAPP_MESSAGE',
-  'SHARE_MESSENGER_MESSAGE',
 ];
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -626,14 +624,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     case 'GET_CURRENT_MESSAGE': {
       getCurrentMessage(sender.tab?.id).then(sendResponse);
-      return true;
-    }
-    case 'FORWARD_WHATSAPP_MESSAGE': {
-      forwardWhatsAppMessage(message.contactId, message.messageData).then(sendResponse);
-      return true;
-    }
-    case 'SHARE_MESSENGER_MESSAGE': {
-      shareMessengerMessage(message.groupId, message.messageData).then(sendResponse);
       return true;
     }
     case 'SYNC_WHATSAPP_GROUPS': {
@@ -895,22 +885,4 @@ function extractCurrentMessage(): { text?: string; media?: boolean } | null {
     return { text: selected.toString().trim() };
   }
   return null;
-}
-
-async function forwardWhatsAppMessage(
-  _contactId: string,
-  _messageData: { text?: string; media?: boolean }
-): Promise<{ success: boolean; error?: string }> {
-  // This would need to be implemented in the WhatsApp content script context
-  // For now, return a placeholder
-  return { success: false, error: 'WhatsApp forwarding not yet implemented in background' };
-}
-
-async function shareMessengerMessage(
-  _groupId: string,
-  _messageData: { text?: string; media?: boolean }
-): Promise<{ success: boolean; error?: string }> {
-  // This would need to be implemented in the Messenger content script context
-  // For now, return a placeholder
-  return { success: false, error: 'Messenger sharing not yet implemented in background' };
 }
