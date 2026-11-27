@@ -40,33 +40,101 @@ function setupObserver(): void {
 }
 
 function checkForForwardButtons(): void {
-  const forwardButtons = document.querySelectorAll(
-    '[data-testid="forward"], [aria-label*="Forward" i], [data-icon="forward"]'
-  );
-  if (forwardButtons.length > 0 && !shareButtonInjected) {
-    injectShareButton();
+  // WhatsApp Web forward button selectors (updated for current UI)
+  const forwardSelectors = [
+    '[data-testid="forward"]',
+    '[data-testid="msg-forward"]',
+    '[aria-label*="Forward" i]',
+    '[aria-label*="forward" i]',
+    '[data-icon="forward"]',
+    '[data-icon="forward-filled"]',
+    'span[data-icon="forward"]',
+    'button[aria-label*="Forward" i]',
+    'div[role="button"][aria-label*="Forward" i]',
+  ];
+
+  for (const selector of forwardSelectors) {
+    const buttons = document.querySelectorAll(selector);
+    if (buttons.length > 0) {
+      logger.debug('content-whatsapp', 'Found forward buttons', {
+        selector,
+        count: buttons.length,
+      });
+      if (!shareButtonInjected) {
+        injectShareButton();
+      }
+      return;
+    }
   }
+  logger.debug('content-whatsapp', 'No forward buttons found with any selector');
 }
 
 async function injectShareButton(): Promise<void> {
   const userSettings = await getUserSettings();
   if (!userSettings.showShareButton) return;
 
-  const forwardButtons = document.querySelectorAll(
-    '[data-testid="forward"], [data-icon="forward"]'
-  );
-  for (const btn of forwardButtons) {
-    if (btn.parentElement?.querySelector('.fgp-share-to-groups-btn')) continue;
+  // Try multiple selectors for the forward button
+  const forwardSelectors = [
+    '[data-testid="forward"]',
+    '[data-testid="msg-forward"]',
+    '[aria-label*="Forward" i]',
+    '[aria-label*="forward" i]',
+    '[data-icon="forward"]',
+    '[data-icon="forward-filled"]',
+    'span[data-icon="forward"]',
+    'button[aria-label*="Forward" i]',
+    'div[role="button"][aria-label*="Forward" i]',
+  ];
 
-    const fgpButton = createShareButton();
-    const position = userSettings.shareButtonPosition;
+  let injected = false;
+  for (const selector of forwardSelectors) {
+    const forwardButtons = document.querySelectorAll(selector);
+    for (const btn of forwardButtons) {
+      if (btn.parentElement?.querySelector('.fgp-share-to-groups-btn')) continue;
 
-    if (position === 'after_share') {
-      btn.parentElement?.insertBefore(fgpButton, btn.nextSibling);
-    } else if (position === 'before_share') {
-      btn.parentElement?.insertBefore(fgpButton, btn);
+      const fgpButton = createShareButton();
+      const position = userSettings.shareButtonPosition;
+
+      if (position === 'after_share') {
+        btn.parentElement?.insertBefore(fgpButton, btn.nextSibling);
+      } else if (position === 'before_share') {
+        btn.parentElement?.insertBefore(fgpButton, btn);
+      }
+      injected = true;
+      logger.info('content-whatsapp', 'Share button injected', { selector });
     }
+    if (injected) break;
+  }
+
+  if (!injected) {
+    logger.warn('content-whatsapp', 'Could not inject share button - no forward button found');
+    // Fallback: try to find any button in the message menu/footer area
+    injectFallbackButton();
+  } else {
     shareButtonInjected = true;
+  }
+}
+
+function injectFallbackButton(): void {
+  // Try to find the message input footer area and add a floating button there
+  const footerSelectors = [
+    'footer[role="region"]',
+    'footer',
+    '[data-testid="conversation-compose-box"]',
+    'div[role="region"][aria-label*="Type"]',
+  ];
+
+  for (const selector of footerSelectors) {
+    const footer = document.querySelector(selector);
+    if (footer && !footer.querySelector('.fgp-share-to-groups-btn')) {
+      const fgpButton = createShareButton();
+      fgpButton.style.position = 'relative';
+      fgpButton.style.marginLeft = '8px';
+      footer.appendChild(fgpButton);
+      logger.info('content-whatsapp', 'Injected fallback button in footer', { selector });
+      shareButtonInjected = true;
+      return;
+    }
   }
 }
 

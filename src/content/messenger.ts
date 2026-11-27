@@ -40,31 +40,94 @@ function setupObserver(): void {
 }
 
 function checkForShareButtons(): void {
-  const shareButtons = document.querySelectorAll(
-    '[aria-label*="Share" i], [data-testid="share-button"]'
-  );
-  if (shareButtons.length > 0 && !shareButtonInjected) {
-    injectShareButton();
+  // Messenger share button selectors (updated for current UI)
+  const shareSelectors = [
+    '[data-testid="share-button"]',
+    '[aria-label*="Share" i]',
+    '[aria-label*="share" i]',
+    'button[aria-label*="Share" i]',
+    'div[role="button"][aria-label*="Share" i]',
+    '[data-testid="share"]',
+    '[data-icon="share"]',
+  ];
+
+  for (const selector of shareSelectors) {
+    const buttons = document.querySelectorAll(selector);
+    if (buttons.length > 0) {
+      logger.debug('content-messenger', 'Found share buttons', { selector, count: buttons.length });
+      if (!shareButtonInjected) {
+        injectShareButton();
+      }
+      return;
+    }
   }
+  logger.debug('content-messenger', 'No share buttons found with any selector');
 }
 
 async function injectShareButton(): Promise<void> {
   const userSettings = await getUserSettings();
   if (!userSettings.showShareButton) return;
 
-  const shareButtons = document.querySelectorAll('[aria-label*="Share" i]');
-  for (const btn of shareButtons) {
-    if (btn.parentElement?.querySelector('.fgp-share-to-groups-btn')) continue;
+  // Try multiple selectors for the share button
+  const shareSelectors = [
+    '[data-testid="share-button"]',
+    '[aria-label*="Share" i]',
+    '[aria-label*="share" i]',
+    'button[aria-label*="Share" i]',
+    'div[role="button"][aria-label*="Share" i]',
+    '[data-testid="share"]',
+    '[data-icon="share"]',
+  ];
 
-    const fgpButton = createShareButton();
-    const position = userSettings.shareButtonPosition;
+  let injected = false;
+  for (const selector of shareSelectors) {
+    const shareButtons = document.querySelectorAll(selector);
+    for (const btn of shareButtons) {
+      if (btn.parentElement?.querySelector('.fgp-share-to-groups-btn')) continue;
 
-    if (position === 'after_share') {
-      btn.parentElement?.insertBefore(fgpButton, btn.nextSibling);
-    } else if (position === 'before_share') {
-      btn.parentElement?.insertBefore(fgpButton, btn);
+      const fgpButton = createShareButton();
+      const position = userSettings.shareButtonPosition;
+
+      if (position === 'after_share') {
+        btn.parentElement?.insertBefore(fgpButton, btn.nextSibling);
+      } else if (position === 'before_share') {
+        btn.parentElement?.insertBefore(fgpButton, btn);
+      }
+      injected = true;
+      logger.info('content-messenger', 'Share button injected', { selector });
     }
+    if (injected) break;
+  }
+
+  if (!injected) {
+    logger.warn('content-messenger', 'Could not inject share button - no share button found');
+    injectFallbackButton();
+  } else {
     shareButtonInjected = true;
+  }
+}
+
+function injectFallbackButton(): void {
+  // Try to find the message input area and add a floating button there
+  const footerSelectors = [
+    '[data-testid="composer"]',
+    '[role="textbox"]',
+    'div[contenteditable="true"][role="textbox"]',
+    'footer',
+    '[aria-label*="Message"]',
+  ];
+
+  for (const selector of footerSelectors) {
+    const footer = document.querySelector(selector);
+    if (footer && !footer.querySelector('.fgp-share-to-groups-btn')) {
+      const fgpButton = createShareButton();
+      fgpButton.style.position = 'relative';
+      fgpButton.style.marginLeft = '8px';
+      footer.appendChild(fgpButton);
+      logger.info('content-messenger', 'Injected fallback button', { selector });
+      shareButtonInjected = true;
+      return;
+    }
   }
 }
 
