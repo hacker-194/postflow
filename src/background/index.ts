@@ -958,14 +958,15 @@ async function saveGroups(
 
 function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?: string }> {
   const groups: Array<{ id: string; name: string; url?: string }> = [];
+  const seenIds = new Set<string>();
 
-  // Multiple selector strategies for WhatsApp Web chat list (auto-generated classes change frequently)
+  // Prefer platform-specific chat containers before generic list elements.
   const chatSelectors = [
-    '[role="listitem"]',
     '[data-testid="chat-list-item"]',
     '[data-testid="cell-frame-container"]',
     '[data-testid="conversation-list-item"]',
-    'div[role="row"]',
+    '#pane-side [role="listitem"]',
+    '#pane-side div[role="row"]',
     '._ak8l',
     '._ak8o',
     '._ak8q',
@@ -973,31 +974,23 @@ function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?
     '.x1yztbdb',
     '.x1n2onr6',
     '[aria-label*="Chat"]',
-    '#pane-side [role="listitem"]',
-    '#pane-side div[role="row"]',
+    '[role="listitem"]',
+    'div[role="row"]',
   ];
 
+  // Prefer explicit title/name nodes over generic text and message previews.
   const nameSelectors = [
-    '[dir="auto"]',
     '[data-testid="cell-frame-title"]',
     '[data-testid="contact-name"]',
     '[data-testid="conversation-title"]',
+    'span[title]',
     '._ao3e',
     '.x1iyjqo2',
-    'span[title]',
+    '[dir="auto"]',
     'span[dir="auto"]',
     'div[dir="auto"]',
     'span[aria-label]',
   ];
-
-  // Debug: log all selector matches
-  console.log('[FGP] WhatsApp: Starting group extraction');
-  for (const chatSel of chatSelectors) {
-    const chatItems = document.querySelectorAll(chatSel);
-    if (chatItems.length > 0) {
-      console.log(`[FGP] WhatsApp: Selector "${chatSel}" matched ${chatItems.length} elements`);
-    }
-  }
 
   for (const chatSel of chatSelectors) {
     const chatItems = document.querySelectorAll(chatSel);
@@ -1021,8 +1014,8 @@ function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?
 
       if (name && name.length > 1) {
         const id = 'wa_' + name.replace(/\s+/g, '_').toLowerCase();
-        // Check if already added
-        if (!groups.some(g => g.id === id)) {
+        if (!seenIds.has(id)) {
+          seenIds.add(id);
           groups.push({ id, name });
         }
       }
@@ -1031,26 +1024,26 @@ function extractWhatsAppGroupsFromPage(): Array<{ id: string; name: string; url?
     if (groups.length > 0) break;
   }
 
-  console.log(`[FGP] WhatsApp: Found ${groups.length} groups`, groups);
   return groups;
 }
 
 function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url?: string }> {
   const groups: Array<{ id: string; name: string; url?: string }> = [];
+  const seenIds = new Set<string>();
 
-  // Multiple selector strategies for Messenger chat list
+  // Prefer Messenger-specific conversation containers before generic list elements.
   const chatSelectors = [
-    '[role="listitem"]',
     '[data-testid="thread-list-item"]',
     '[data-testid="cell-frame-container"]',
     '[data-testid="conversation-list-item"]',
-    'div[role="row"]',
+    '[data-pagelet*="Messenger"] [role="listitem"]',
+    '[aria-label*="Conversation"]',
     '.x1yztbdb',
     '.x1n2onr6',
     '.x78zum5',
     '.x1q0g3np',
-    '[aria-label*="Conversation"]',
-    '[data-pagelet*="Messenger"] [role="listitem"]',
+    '[role="listitem"]',
+    'div[role="row"]',
   ];
 
   const nameSelectors = [
@@ -1065,15 +1058,6 @@ function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url
     'div[dir="auto"]',
     'span[aria-label]',
   ];
-
-  // Debug: log all selector matches
-  console.log('[FGP] Messenger: Starting group extraction');
-  for (const chatSel of chatSelectors) {
-    const chatItems = document.querySelectorAll(chatSel);
-    if (chatItems.length > 0) {
-      console.log(`[FGP] Messenger: Selector "${chatSel}" matched ${chatItems.length} elements`);
-    }
-  }
 
   for (const chatSel of chatSelectors) {
     const chatItems = document.querySelectorAll(chatSel);
@@ -1096,7 +1080,8 @@ function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url
 
       if (name && name.length > 1) {
         const id = 'ms_' + name.replace(/\s+/g, '_').toLowerCase();
-        if (!groups.some(g => g.id === id)) {
+        if (!seenIds.has(id)) {
+          seenIds.add(id);
           groups.push({ id, name });
         }
       }
@@ -1104,7 +1089,6 @@ function extractMessengerGroupsFromPage(): Array<{ id: string; name: string; url
     if (groups.length > 0) break;
   }
 
-  console.log(`[FGP] Messenger: Found ${groups.length} groups`, groups);
   return groups;
 }
 
