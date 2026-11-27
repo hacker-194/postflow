@@ -1,7 +1,7 @@
 {
-  "name": "free-group-poster",
+  "name": "postflow",
   "version": "1.0.0",
-  "description": "Free, open-source Chrome extension for sharing posts to multiple Facebook groups. Advanced features, no tracking, fully local.",
+  "description": "PostFlow — Free, open-source Chrome extension for sharing posts to multiple Facebook groups. Advanced scheduling, Spintax, image rotation, templates. Zero tracking, fully local.",
   "type": "module",
   "scripts": {
     "dev": "vite build --mode development --watch",
