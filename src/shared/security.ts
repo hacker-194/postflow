@@ -162,7 +162,9 @@ export function validateImageUrl(input: string): boolean {
 export function validateFacebookUrl(input: string): boolean {
   try {
     const url = new URL(input);
-    return ['facebook.com', 'm.facebook.com', 'www.facebook.com'].includes(url.hostname);
+    const hostname = url.hostname.toLowerCase();
+    const isFacebookHost = hostname === 'facebook.com' || hostname.endsWith('.facebook.com');
+    return url.protocol === 'https:' && isFacebookHost && !url.username && !url.password;
   } catch {
     return false;
   }
