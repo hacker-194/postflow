@@ -691,3 +691,6 @@ function sleep(ms: number): Promise<void> {
 }
 
 initialize();
+
+// Keep this content script's declarations scoped to its own bundle.
+export {};
