@@ -96,15 +96,25 @@ async function resetDailyCounterIfNeeded(): Promise<void> {
   }
 }
 
-async function processScheduledShares(): Promise<void> {
-  const now = Date.now();
-  const scheduled = await getAll<ScheduledShare>('scheduledShares');
-  const pending = Object.values(scheduled).filter(
-    s => s.status === 'pending' && s.scheduledAt <= now
-  );
+let processingScheduledShares = false;
 
-  for (const share of pending) {
-    await executeShare(share.id);
+async function processScheduledShares(): Promise<void> {
+  // Chrome alarms, startup, and manual triggers can overlap within a service-worker lifetime.
+  if (processingScheduledShares) return;
+  processingScheduledShares = true;
+
+  try {
+    const now = Date.now();
+    const scheduled = await getAll<ScheduledShare>('scheduledShares');
+    const pending = Object.values(scheduled).filter(
+      s => s.status === 'pending' && s.scheduledAt <= now
+    );
+
+    for (const share of pending) {
+      await executeShare(share.id);
+    }
+  } finally {
+    processingScheduledShares = false;
   }
 }
 
