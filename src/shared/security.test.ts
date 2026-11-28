@@ -117,9 +117,12 @@ describe('Security', () => {
       expect(validateFacebookUrl('https://evil.com')).toBe(false);
       expect(validateFacebookUrl('not a url')).toBe(false);
     });
-    it('accepts http facebook urls (hostname match)', () => {
-      // Function only validates hostname, not protocol
-      expect(validateFacebookUrl('http://facebook.com/groups/123')).toBe(true);
+    it('requires HTTPS and rejects deceptive or credentialed URLs', () => {
+      expect(validateFacebookUrl('http://facebook.com/groups/123')).toBe(false);
+      expect(validateFacebookUrl('https://facebook.com.evil.example/groups/123')).toBe(false);
+      expect(validateFacebookUrl('https://facebook.com@evil.example/groups/123')).toBe(false);
+      expect(validateFacebookUrl('https://user:pass@facebook.com/groups/123')).toBe(false);
+      expect(validateFacebookUrl('https://business.facebook.com/groups/123')).toBe(true);
     });
   });
 
