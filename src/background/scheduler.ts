@@ -4,7 +4,7 @@
  */
 
 import { logger } from '../shared/logger';
-import type { ScheduledShare } from '../shared/types';
+import type { ScheduledShare, ShareSettings } from '../shared/types';
 import { getAll, get, set } from '../shared/storage';
 import { calculateDelay } from './utils';
 import { executeShareJob } from './job-runner';
