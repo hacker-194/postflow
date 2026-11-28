@@ -1,4 +1,11 @@
+/**
+ * Domain Types — Source of Truth for the entire extension
+ * All other modules import types from here.
+ */
+
 export type Platform = 'facebook' | 'whatsapp' | 'messenger';
+
+export type ShareMode = 'share_original' | 'repost_content';
 
 export interface Group {
   id: string;
@@ -22,7 +29,9 @@ export interface GroupList {
   updatedAt: number;
 }
 
-export type ShareMode = 'share_original' | 'repost_content';
+export interface ShareModeSettings {
+  mode: ShareMode;
+}
 
 export interface ShareSettings {
   mode: ShareMode;
@@ -33,24 +42,32 @@ export interface ShareSettings {
   imageSetIds?: string[];
   backgroundColor?: string;
   delayBetweenGroups: number;
-  safetyLevel: 'fast' | 'balanced' | 'safe';
+  safetyLevel: SafetyLevel;
   overnightPause: boolean;
-  overnightStart: string;
-  overnightEnd: string;
+  overnightStart: string; // HH:MM
+  overnightEnd: string; // HH:MM
   maxPostsPerDay: number;
 }
+
+export type SafetyLevel = 'fast' | 'balanced' | 'safe';
 
 export interface ScheduledShare {
   id: string;
   postUrl: string;
   postPreview: PostPreview;
   groupListId: string;
+  /** Exact groups picked in the share sheet; wins over groupListId when set. */
+  groupIds?: string[];
   settings: ShareSettings;
   scheduledAt: number;
   createdAt: number;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: ShareJobStatus;
   progress?: ShareProgress;
+  checkpoint?: JobCheckpoint;
 }
+
+export type ShareJobStatus =
+  'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 
 export interface PostPreview {
   url: string;
@@ -93,6 +110,7 @@ export interface ShareResult {
   startedAt: number;
   completedAt?: number;
   status: 'running' | 'completed' | 'failed' | 'cancelled';
+  isFreeShare: boolean;
 }
 
 export interface ImageSet {
@@ -122,6 +140,7 @@ export interface UserSettings {
   soundNotifications: boolean;
   desktopNotifications: boolean;
   analyticsOptIn: boolean;
+  plan: 'free' | 'pro';
 }
 
 export interface StorageSchema {
@@ -134,41 +153,161 @@ export interface StorageSchema {
   userSettings: UserSettings;
   dailyPosts: number;
   dailyPostsDate: string;
+  freeSharesUsed: number;
   fbSession?: {
     userId: string;
     name: string;
     profilePic: string;
     expiresAt: number;
   };
+  jobCheckpoints: Record<string, JobCheckpoint>;
 }
 
-export const DEFAULT_SHARE_SETTINGS: ShareSettings = {
-  mode: 'share_original',
-  caption: '',
-  firstComment: '',
-  useSpintax: false,
-  delayBetweenGroups: 30000,
-  safetyLevel: 'balanced',
-  overnightPause: true,
-  overnightStart: '22:00',
-  overnightEnd: '07:00',
-  maxPostsPerDay: 200,
-};
+export interface JobCheckpoint {
+  shareId: string;
+  jobState: ShareJobState;
+  completedGroups: GroupResult[];
+  currentGroupIndex: number;
+  updatedAt: number;
+}
 
-export const DEFAULT_USER_SETTINGS: UserSettings = {
-  theme: 'system',
-  language: 'en',
-  showShareButton: true,
-  shareButtonPosition: 'after_share',
-  autoDetectGroups: true,
-  confirmBeforeShare: true,
-  soundNotifications: true,
-  desktopNotifications: true,
-  analyticsOptIn: false,
-};
+export interface GroupResult {
+  groupId: string;
+  groupName: string;
+  success: boolean;
+  error?: string;
+  timestamp: number;
+}
 
-export const SAFETY_LEVEL_DELAYS = {
-  fast: { min: 10000, max: 20000 },
-  balanced: { min: 30000, max: 60000 },
-  safe: { min: 90000, max: 180000 },
-} as const;
+// State machine types
+export type ShareJobState =
+  | { status: 'queued'; scheduledAt: number }
+  | { status: 'opening'; startedAt: number }
+  | { status: 'selecting-group'; groupId: string; attempt: number }
+  | { status: 'captioning'; groupId: string }
+  | { status: 'posting'; groupId: string }
+  | { status: 'verifying'; groupId: string }
+  | { status: 'done'; completedAt: number; results: GroupResult[] }
+  | { status: 'failed'; reason: FailureReason; failedAt: number; partialResults: GroupResult[] }
+  | { status: 'interrupted'; reason: 'sw-restart' | 'browser-close'; checkpoint: JobCheckpoint };
+
+export type FailureReason =
+  | 'captcha'
+  | 'checkpoint'
+  | 'rate-limit'
+  | 'temporarily-blocked'
+  | 'sharing-disabled'
+  | 'admin-approval-required'
+  | 'unexpected-dialog'
+  | 'network-error'
+  | 'group-not-found'
+  | 'share-dialog-failed'
+  | 'post-button-failed'
+  | 'daily-limit-reached'
+  | 'user-cancelled'
+  | 'unknown';
+
+export interface StateEvent {
+  type:
+    | 'alarm-tick'
+    | 'share-dialog-opened'
+    | 'group-selected'
+    | 'caption-set'
+    | 'post-clicked'
+    | 'success'
+    | 'all-groups-done'
+    | 'anomaly-detected'
+    | 'sw-restart';
+  payload?: unknown;
+}
+
+// Message types
+export type BackgroundMessageType =
+  | 'SCHEDULE_SHARE'
+  | 'CANCEL_SHARE'
+  | 'GET_SHARE_PROGRESS'
+  | 'GET_DAILY_POSTS'
+  | 'SYNC_GROUPS'
+  | 'SYNC_WHATSAPP_GROUPS'
+  | 'SYNC_MESSENGER_GROUPS'
+  | 'GET_ALL_GROUPS'
+  | 'GET_GROUP_LISTS'
+  | 'GET_GROUPS_FOR_LIST'
+  | 'GET_TEMPLATES'
+  | 'GET_IMAGE_SETS'
+  | 'GET_ALL_SCHEDULED'
+  | 'GET_SHARE_HISTORY'
+  | 'GET_USER_SETTINGS'
+  | 'UPDATE_USER_SETTINGS'
+  | 'SAVE_GROUP'
+  | 'DELETE_GROUP'
+  | 'SAVE_GROUP_LIST'
+  | 'DELETE_GROUP_LIST'
+  | 'SAVE_TEMPLATE'
+  | 'DELETE_TEMPLATE'
+  | 'SAVE_IMAGE_SET'
+  | 'DELETE_IMAGE_SET'
+  | 'EXPORT_DATA'
+  | 'IMPORT_DATA'
+  | 'CLEAR_ALL_DATA'
+  | 'GET_WHATSAPP_GROUPS'
+  | 'GET_MESSENGER_GROUPS'
+  | 'GET_CURRENT_MESSAGE'
+  | 'PERFORM_SHARE'
+  | 'SHARE_PROGRESS'
+  | 'PLAY_SOUND';
+
+export interface BackgroundMessage<T = unknown> {
+  type: BackgroundMessageType;
+  payload?: T;
+  shareId?: string;
+  listId?: string;
+  id?: string;
+  settings?: Partial<UserSettings>;
+  data?: string;
+}
+
+export interface MessageResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  groups?: Array<{ id: string; name: string; url?: string; memberCount?: number }>;
+}
+
+// Adapter types
+export interface RawGroup {
+  id: string;
+  name: string;
+  url: string;
+  memberCount?: number;
+}
+
+export interface ExtractionResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  strategyUsed?: string;
+}
+
+export interface ShareResultData {
+  success: boolean;
+  error?: string;
+  anomaly?: Anomaly;
+}
+
+export interface Anomaly {
+  type: AnomalyType;
+  message: string;
+  recoverable: boolean;
+  selector?: string;
+}
+
+export type AnomalyType =
+  | 'captcha'
+  | 'checkpoint'
+  | 'rate-limit'
+  | 'temporarily-blocked'
+  | 'sharing-disabled'
+  | 'admin-approval-required'
+  | 'unexpected-dialog'
+  | 'network-error';

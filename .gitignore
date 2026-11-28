@@ -29,3 +29,8 @@ coverage/
 
 # TypeScript
 *.tsbuildinfo
+# local live WhatsApp test artifacts
+.wa-live-profile/
+wa-live.log
+wa-open.out
+.fb-live-profile/

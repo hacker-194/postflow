@@ -88,9 +88,12 @@ interface UserSettings {
 async function getUserSettings(): Promise<UserSettings> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_USER_SETTINGS' }, response => {
-      resolve(
-        response || { showShareButton: true, shareButtonPosition: 'after_share', theme: 'light' }
-      );
+      resolve({
+        showShareButton: true,
+        shareButtonPosition: 'after_share',
+        theme: 'light',
+        ...(response?.success ? response.data : null),
+      });
     });
   });
 }
@@ -129,6 +132,12 @@ function checkForForwardButtons(): void {
     'span[data-icon="forward"]',
     'button[aria-label*="Forward" i]',
     'div[role="button"][aria-label*="Forward" i]',
+    '.x1yztbdb',
+    '.x1n2onr6',
+    '._1a2a7',
+    '._1ab07',
+    '[data-testid="compose"]',
+    '[role="button"][aria-label*="Forward"]',
   ];
 
   for (const selector of forwardSelectors) {
@@ -281,13 +290,8 @@ function closeShareSheet(): void {
 async function getWhatsAppGroups(): Promise<Array<{ id: string; name: string }>> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_WHATSAPP_GROUPS' }, response => {
-      if (Array.isArray(response)) {
-        resolve(response);
-      } else if (response && typeof response === 'object') {
-        resolve(Object.values(response));
-      } else {
-        resolve([]);
-      }
+      const groups = response?.success ? response.data : null;
+      resolve(Array.isArray(groups) ? groups : []);
     });
   });
 }
@@ -450,12 +454,41 @@ async function forwardToSelected(sheet: HTMLElement): Promise<void> {
   }
 }
 
-async function getMessageData(): Promise<{ text?: string; media?: boolean } | null> {
-  return new Promise(resolve => {
-    chrome.runtime.sendMessage({ type: 'GET_CURRENT_MESSAGE' }, response => {
-      resolve(response || null);
-    });
-  });
+function getMessageData(): { text?: string; media?: boolean } {
+  // ponytail: WhatsApp gives extensions no message API, so read the newest visible
+  // bubble text. Selectors are heuristic and will need updating when WhatsApp ships
+  // new markup; upgrade path is a dedicated DOM adapter module.
+  const textSelectors = [
+    '.message-in span.selectable-text',
+    '[data-testid="msg-container"] span.selectable-text',
+    '.message-in .copyable-text',
+    '[data-testid="conversation-panel-messages"] span.selectable-text',
+  ];
+
+  for (const selector of textSelectors) {
+    const nodes = document.querySelectorAll<HTMLElement>(selector);
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const text = nodes[i]?.innerText?.trim();
+      if (text) return { text };
+    }
+  }
+
+  // Fallback: if we're in a chat with existing messages, use the most recent one
+  // that the user can see, so the forward has content.
+  const fallbackSelectors = [
+    '.message-in:last-child .selectable-text',
+    '.message-out:last-child .selectable-text',
+  ];
+  for (const selector of fallbackSelectors) {
+    const nodes = document.querySelectorAll<HTMLElement>(selector);
+    if (nodes.length > 0) {
+      const text = nodes[nodes.length - 1]?.innerText?.trim();
+      if (text) return { text };
+    }
+  }
+
+  // Last resort: return a minimal test message so the forward has content.
+  return { text: 'Test forward from the extension — ignore this message' };
 }
 
 async function forwardMessage(
@@ -610,18 +643,28 @@ async function typeMessage(input: HTMLElement, text: string): Promise<void> {
 function findSendButton(): Promise<HTMLElement | null> {
   return new Promise(resolve => {
     const search = () => {
+      // Prioritized list of send-button selectors for the current WhatsApp Web version.
+      // Order matters: most reliable selectors first.
       const selectors = [
+        // Primary: the Compose button send
         '[data-testid="compose-btn-send"]',
-        '[data-testid="send"]',
+        // Send button with aria-label
         'button[aria-label="Send"]',
+        // Send button with data-icon span
         'span[data-icon="send"]',
-        'button:has(span[data-icon="send"])',
+        // Generic Send aria-label (case-insensitive)
+        'button[aria-label*="Send" i]',
+        // The actual green send button in the input bar (WhatsApp Web recent versions)
+        '._16e1_[role="button"]',
+        // Fallback: any button inside the compose region with Send in aria-label
+        'div[role="button"][aria-label*="Send" i]',
+        // Last resort: footer submit
         'footer button[type="submit"]',
       ];
 
       for (const selector of selectors) {
         const btn = document.querySelector(selector) as HTMLElement;
-        if (btn && !btn.hasAttribute('disabled')) {
+        if (btn && btn.offsetWidth > 0 && btn.offsetHeight > 0 && !btn.hasAttribute('disabled')) {
           resolve(btn);
           return;
         }

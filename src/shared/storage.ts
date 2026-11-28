@@ -1,7 +1,23 @@
+/**
+ * IndexedDB Storage Wrapper (via idb)
+ * Namespaced keys, schema validation, single instance.
+ */
+
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { logger } from './logger';
-import type { StorageSchema, UserSettings } from './types';
-import { DEFAULT_USER_SETTINGS } from './types';
+import type {
+  StorageSchema,
+  UserSettings,
+  ShareSettings,
+  Group,
+  GroupList,
+  ScheduledShare,
+  ShareResult,
+  ImageSet,
+  Template,
+  JobCheckpoint,
+} from './types';
+import { DEFAULT_USER_SETTINGS, DEFAULT_SHARE_SETTINGS } from './constants';
 
 const DB_NAME = 'fgp-storage';
 const DB_VERSION = 1;
@@ -16,7 +32,7 @@ interface FGPStorage extends DBSchema {
 
 let dbPromise: Promise<IDBPDatabase<FGPStorage>> | null = null;
 
-function getDB() {
+function getDB(): Promise<IDBPDatabase<FGPStorage>> {
   if (!dbPromise) {
     dbPromise = openDB<FGPStorage>(DB_NAME, DB_VERSION, {
       upgrade(db) {
@@ -93,6 +109,7 @@ export async function clearNamespace(namespace: string): Promise<void> {
   await tx.done;
 }
 
+// Typed helpers
 export async function getUserSettings(): Promise<UserSettings> {
   const settings = await get<UserSettings>('userSettings');
   return { ...DEFAULT_USER_SETTINGS, ...settings };
@@ -101,6 +118,148 @@ export async function getUserSettings(): Promise<UserSettings> {
 export async function setUserSettings(partial: Partial<UserSettings>): Promise<void> {
   const current = await getUserSettings();
   await set('userSettings', { ...current, ...partial });
+}
+
+export async function getShareSettings(): Promise<ShareSettings> {
+  return DEFAULT_SHARE_SETTINGS;
+}
+
+export async function getGroups(): Promise<Record<string, Group>> {
+  return getAll<Group>('groups');
+}
+
+export async function getGroup(id: string): Promise<Group | undefined> {
+  return get<Group>('groups', id);
+}
+
+export async function setGroup(group: Group): Promise<void> {
+  await set('groups', group, group.id);
+}
+
+export async function deleteGroup(id: string): Promise<void> {
+  await del('groups', id);
+}
+
+export async function getGroupLists(): Promise<Record<string, GroupList>> {
+  return getAll<GroupList>('groupLists');
+}
+
+export async function getGroupList(id: string): Promise<GroupList | undefined> {
+  return get<GroupList>('groupLists', id);
+}
+
+export async function setGroupList(list: GroupList): Promise<void> {
+  await set('groupLists', { ...list, updatedAt: Date.now() }, list.id);
+}
+
+export async function deleteGroupList(id: string): Promise<void> {
+  await del('groupLists', id);
+}
+
+export async function getGroupsForList(listId: string): Promise<Group[]> {
+  const list = await get<GroupList>('groupLists', listId);
+  if (!list) return [];
+  const groups = await getGroups();
+  return list.groupIds.map(id => groups[id]).filter(Boolean) as Group[];
+}
+
+export async function getScheduledShares(): Promise<Record<string, ScheduledShare>> {
+  return getAll<ScheduledShare>('scheduledShares');
+}
+
+export async function getScheduledShare(id: string): Promise<ScheduledShare | undefined> {
+  return get<ScheduledShare>('scheduledShares', id);
+}
+
+export async function setScheduledShare(share: ScheduledShare): Promise<void> {
+  await set('scheduledShares', share, share.id);
+}
+
+export async function deleteScheduledShare(id: string): Promise<void> {
+  await del('scheduledShares', id);
+}
+
+export async function getShareHistory(): Promise<Record<string, ShareResult>> {
+  return getAll<ShareResult>('shareHistory');
+}
+
+export async function setShareHistory(result: ShareResult): Promise<void> {
+  await set('shareHistory', result, result.id);
+}
+
+export async function getImageSets(): Promise<Record<string, ImageSet>> {
+  return getAll<ImageSet>('imageSets');
+}
+
+export async function setImageSet(imageSet: ImageSet): Promise<void> {
+  await set('imageSets', imageSet, imageSet.id);
+}
+
+export async function deleteImageSet(id: string): Promise<void> {
+  await del('imageSets', id);
+}
+
+export async function getTemplates(): Promise<Record<string, Template>> {
+  return getAll<Template>('templates');
+}
+
+export async function setTemplate(template: Template): Promise<void> {
+  await set('templates', { ...template, updatedAt: Date.now() }, template.id);
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  await del('templates', id);
+}
+
+export async function getJobCheckpoints(): Promise<Record<string, JobCheckpoint>> {
+  return getAll<JobCheckpoint>('jobCheckpoints');
+}
+
+export async function setJobCheckpoint(checkpoint: JobCheckpoint): Promise<void> {
+  await set('jobCheckpoints', checkpoint, checkpoint.shareId);
+}
+
+export async function deleteJobCheckpoint(shareId: string): Promise<void> {
+  await del('jobCheckpoints', shareId);
+}
+
+export async function getDailyPosts(): Promise<number> {
+  const today = new Date().toISOString().split('T')[0];
+  const storedDate = await get<string>('dailyPostsDate');
+  if (storedDate !== today) {
+    await set('dailyPosts', 0);
+    await set('dailyPostsDate', today);
+    return 0;
+  }
+  return (await get<number>('dailyPosts')) || 0;
+}
+
+export async function incrementDailyPosts(count: number): Promise<number> {
+  const current = await getDailyPosts();
+  const newValue = current + count;
+  await set('dailyPosts', newValue);
+  return newValue;
+}
+
+export async function resetDailyPosts(): Promise<void> {
+  const today = new Date().toISOString().split('T')[0];
+  await set('dailyPosts', 0);
+  await set('dailyPostsDate', today);
+}
+
+export async function getFreeSharesUsed(): Promise<number> {
+  return (await get<number>('freeSharesUsed')) || 0;
+}
+
+export async function incrementFreeSharesUsed(count: number): Promise<number> {
+  const current = await getFreeSharesUsed();
+  const newValue = Math.min(current + count, 6);
+  await set('freeSharesUsed', newValue);
+  return newValue;
+}
+
+export async function resetFreeSharesDaily(): Promise<void> {
+  await set('freeSharesUsed', 0);
 }
 
 export async function exportAllData(): Promise<string> {
@@ -129,11 +288,48 @@ export async function importAllData(json: string): Promise<void> {
   const tx = db.transaction(STORE_NAME, 'readwrite');
 
   for (const [key, value] of entries) {
-    // Preserve the complete key: runtime reads and writes use the same fgp/<namespace> path.
     await tx.store.put(value as FGPStorage[typeof STORE_NAME]['value'], key);
   }
 
   await tx.done;
+}
+
+export async function clearAllData(): Promise<void> {
+  const namespaces = [
+    'groups',
+    'groupLists',
+    'scheduledShares',
+    'shareHistory',
+    'imageSets',
+    'templates',
+    'userSettings',
+    'jobCheckpoints',
+  ];
+  for (const ns of namespaces) {
+    await clearNamespace(ns);
+  }
+  await set('userSettings', DEFAULT_USER_SETTINGS);
+  await set('dailyPosts', 0);
+  await set('dailyPostsDate', new Date().toISOString().split('T')[0]);
+  await set('freeSharesUsed', 0);
+}
+
+export async function initializeDefaults(): Promise<void> {
+  const existing = await get<UserSettings>('userSettings');
+  if (!existing) {
+    await set('userSettings', DEFAULT_USER_SETTINGS);
+    logger.info('storage', 'Initialized default user settings');
+  }
+  const dailyPosts = await get<number>('dailyPosts');
+  if (dailyPosts === undefined) {
+    await set('dailyPosts', 0);
+    await set('dailyPostsDate', new Date().toISOString().split('T')[0]);
+  }
+  const freeSharesUsed = await get<number>('freeSharesUsed');
+  if (freeSharesUsed === undefined) {
+    await set('freeSharesUsed', 0);
+  }
+  logger.info('storage', 'Defaults initialized');
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {

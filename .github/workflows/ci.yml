@@ -1,78 +1,113 @@
-name: CI/CD
+name: CI
 
 on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
-  release:
-    types: [published]
-
-env:
-  NODE_VERSION: '20'
+    branches: [main, develop]
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & TypeCheck
+  lint-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: ${{ env.NODE_VERSION }}, cache: 'npm' }
-      - run: npm ci
-      - run: npm run lint
-      - run: npx tsc --noEmit
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: ${{ env.NODE_VERSION }}, cache: 'npm' }
-      - run: npm ci
-      - run: npm run test -- --coverage
-      - uses: codecov/codecov-action@v4
-        if: github.event_name == 'push'
-        with: { token: ${{ secrets.CODECOV_TOKEN }}, files: ./coverage/lcov.info }
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
-  e2e:
-    name: E2E Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: ${{ env.NODE_VERSION }}, cache: 'npm' }
-      - run: npm ci
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: xvfb-run --auto-servernum npm run test:e2e
-        env: { CI: true }
+      - name: Install dependencies
+        run: npm ci
 
-  build:
-    name: Build Extension
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm run test -- --run
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-build
+          path: dist/
+          retention-days: 7
+
+  e2e-tests:
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test, e2e]
+    needs: lint-and-test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: ${{ env.NODE_VERSION }}, cache: 'npm' }
-      - run: npm ci
-      - run: npm run build
-      - run: |
-          cd dist && zip -r ../extension.zip .
-      - uses: actions/upload-artifact@v4
-        with: { name: extension, path: extension.zip, retention-days: 30 }
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:5173
+
+      - name: Upload E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results/
+          retention-days: 7
 
   release:
-    name: Create Release
     runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: [lint-and-test, e2e-tests]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/download-artifact@v4
-        with: { name: extension, path: dist }
-      - uses: softprops/action-gh-release@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          files: dist/extension.zip
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Create release zip
+        run: |
+          cd dist
+          zip -r ../free-group-poster-${{ github.ref_name }}.zip .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: free-group-poster-${{ github.ref_name }}.zip
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

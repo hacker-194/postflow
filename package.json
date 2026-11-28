@@ -1,7 +1,7 @@
 {
-  "name": "postflow",
+  "name": "free-group-poster",
   "version": "1.0.0",
-  "description": "PostFlow — Free, open-source Chrome extension for sharing posts to multiple Facebook groups. Advanced scheduling, Spintax, image rotation, templates. Zero tracking, fully local.",
+  "description": "Free Group Poster — Free, open-source Chrome extension for sharing posts to multiple Facebook groups. Advanced scheduling, Spintax, image rotation, templates. Zero tracking, fully local.",
   "type": "module",
   "scripts": {
     "dev": "vite build --mode development --watch",
@@ -41,6 +41,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.20",
     "@eslint/js": "^9.9.0",
     "@playwright/test": "^1.46.0",
     "@testing-library/jest-dom": "^6.4.0",
@@ -57,6 +58,7 @@
     "eslint-plugin-react": "^7.35.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.4.14",
+    "fake-indexeddb": "^6.2.8",
     "husky": "^9.1.0",
     "jsdom": "^31.0.1",
     "lint-staged": "^15.2.0",

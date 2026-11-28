@@ -1,5 +1,11 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import { indexedDB } from 'fake-indexeddb';
+import { IDBFactory } from 'fake-indexeddb/lib/FDBFactory';
+
+// Mock IndexedDB
+global.indexedDB = indexedDB as unknown as IDBFactory;
+global.IDBKeyRange = indexedDB.IDBKeyRange;
 
 type MockEvent = {
   addListener: ReturnType<typeof vi.fn>;

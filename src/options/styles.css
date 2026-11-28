@@ -18,6 +18,8 @@
   --fgp-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   --fgp-radius: 12px;
   --fgp-transition: all 0.2s ease;
+  --fgp-focus-ring: 0 0 0 3px #e7f3ff;
+  --fgp-focus-ring-dark: 0 0 0 3px #1877f2;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,7 +30,32 @@
     --fgp-text: #e4e6eb;
     --fgp-text-secondary: #b0b3b8;
     --fgp-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --fgp-focus-ring: 0 0 0 3px #1877f2;
+    --fgp-focus-ring-dark: 0 0 0 3px #60a5fa;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.fgp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 body {
@@ -131,6 +158,7 @@ body {
   cursor: pointer;
   white-space: nowrap;
   transition: var(--fgp-transition);
+  min-height: 44px;
 }
 
 .fgp-nav button:hover {
@@ -141,6 +169,47 @@ body {
 .fgp-nav button.active {
   background: var(--fgp-primary);
   color: white;
+}
+
+.fgp-nav button:focus-visible {
+  outline: none;
+  box-shadow: var(--fgp-focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-nav button:focus-visible {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
+}
+
+.fgp-header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: var(--fgp-bg);
+  border-radius: 10px;
+  color: var(--fgp-text-secondary);
+  cursor: pointer;
+  transition: var(--fgp-transition);
+}
+
+.fgp-header-btn:hover {
+  background: var(--fgp-border);
+  color: var(--fgp-text);
+}
+
+.fgp-header-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--fgp-focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-header-btn:focus-visible {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
 }
 
 .fgp-main {
@@ -242,6 +311,68 @@ body {
 .fgp-btn-icon:hover {
   background: var(--fgp-border);
   color: var(--fgp-text);
+}
+
+/* Focus styles for accessibility */
+.fgp-btn:focus-visible,
+.fgp-btn-icon:focus-visible,
+.fgp-nav button:focus-visible,
+.fgp-header-btn:focus-visible,
+.fgp-select:focus-visible,
+.fgp-search input:focus-visible,
+.fgp-form-row input:focus-visible,
+.fgp-form-row select:focus-visible,
+.fgp-form-row textarea:focus-visible,
+.fgp-modal-overlay:focus-visible,
+.fgp-modal button:focus-visible {
+  outline: none;
+  box-shadow: var(--fgp-focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-btn:focus-visible,
+  .fgp-btn-icon:focus-visible,
+  .fgp-nav button:focus-visible,
+  .fgp-header-btn:focus-visible,
+  .fgp-select:focus-visible,
+  .fgp-search input:focus-visible,
+  .fgp-form-row input:focus-visible,
+  .fgp-form-row select:focus-visible,
+  .fgp-form-row textarea:focus-visible,
+  .fgp-modal-overlay:focus-visible,
+  .fgp-modal button:focus-visible {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
+}
+
+/* Ensure touch targets meet 44px minimum */
+.fgp-btn {
+  min-height: 44px;
+}
+
+.fgp-btn-icon {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.fgp-nav button {
+  min-height: 44px;
+}
+
+.fgp-header-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.fgp-select,
+.fgp-form-row input,
+.fgp-form-row select,
+.fgp-form-row textarea {
+  min-height: 44px;
+}
+
+.fgp-search input {
+  min-height: 44px;
 }
 
 .fgp-search {
@@ -448,6 +579,7 @@ body {
   font-size: 14px;
   font-family: inherit;
   transition: var(--fgp-transition);
+  min-height: 44px;
 }
 
 .fgp-form-row input:focus,
@@ -455,7 +587,15 @@ body {
 .fgp-form-row textarea:focus {
   outline: none;
   border-color: var(--fgp-primary);
-  box-shadow: 0 0 0 3px #e7f3ff;
+  box-shadow: var(--fgp-focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-form-row input:focus,
+  .fgp-form-row select:focus,
+  .fgp-form-row textarea:focus {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
 }
 
 .fgp-form-row textarea {
@@ -525,8 +665,8 @@ body {
 }
 
 .fgp-checkbox-label input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   accent-color: var(--fgp-primary);
 }
 
@@ -1233,4 +1373,314 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--fgp-text-secondary);
+}
+
+/* Toast notifications */
+.fgp-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 14px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 1000;
+  animation: fgp-toast-in 0.3s ease;
+  max-width: 360px;
+  box-shadow: var(--fgp-shadow);
+}
+
+@keyframes fgp-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fgp-toast.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.fgp-toast.error {
+  background: #fce4ec;
+  color: #c62828;
+  border: 1px solid #f8bbd0;
+}
+
+.fgp-toast.info {
+  background: #e7f3ff;
+  color: #1565c0;
+  border: 1px solid #bbdefb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-toast.success {
+    background: #1b5e20;
+    color: #a5d6a7;
+    border-color: #2e7d32;
+  }
+  .fgp-toast.error {
+    background: #7f1d1d;
+    color: #fca5a5;
+    border-color: #b91c1c;
+  }
+  .fgp-toast.info {
+    background: #1e3a5f;
+    color: #93c5fd;
+    border-color: #3b82f6;
+  }
+}
+
+/* Confirm dialog */
+.fgp-modal-confirm {
+  max-width: 400px;
+}
+
+/* Form error messages */
+.fgp-form-error {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--fgp-danger);
+}
+
+.fgp-form-field input[aria-invalid='true'],
+.fgp-form-field select[aria-invalid='true'],
+.fgp-form-field textarea[aria-invalid='true'],
+.fgp-url-input-row input[aria-invalid='true'] {
+  border-color: var(--fgp-danger);
+}
+
+.fgp-form-field input[aria-invalid='true']:focus,
+.fgp-form-field select[aria-invalid='true']:focus,
+.fgp-form-field textarea[aria-invalid='true']:focus,
+.fgp-url-input-row input[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-form-field input[aria-invalid='true']:focus,
+  .fgp-form-field select[aria-invalid='true']:focus,
+  .fgp-form-field textarea[aria-invalid='true']:focus,
+  .fgp-url-input-row input[aria-invalid='true']:focus {
+    box-shadow: 0 0 0 3px rgba(239, 83, 80, 0.4);
+  }
+}
+
+/* Focus styles for checkbox labels */
+.fgp-checkbox-label:focus-within {
+  outline: none;
+  box-shadow: var(--fgp-focus-ring);
+  border-radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-checkbox-label:focus-within {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
+}
+
+/* Focus styles for select-sm and setting-row select */
+.fgp-select-sm:focus-visible,
+.fgp-setting-row select:focus-visible {
+  outline: none;
+  border-color: var(--fgp-primary);
+  box-shadow: var(--fgp-focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-select-sm:focus-visible,
+  .fgp-setting-row select:focus-visible {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
+}
+
+/* Touch targets for checkbox inputs */
+.fgp-checkbox-label input[type='checkbox'] {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.fgp-setting-row input[type='checkbox'] {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* Ensure modal buttons have proper touch targets */
+.fgp-modal-footer .fgp-btn {
+  min-height: 44px;
+}
+
+.fgp-modal-footer .fgp-btn-icon {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Image URL input row */
+.fgp-url-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.fgp-url-input-row input {
+  flex: 1;
+  min-height: 44px;
+}
+
+/* Muted text */
+.fgp-muted {
+  color: var(--fgp-text-secondary);
+  font-size: 13px;
+}
+
+/* Template meta */
+.fgp-template-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--fgp-border);
+  font-size: 12px;
+  color: var(--fgp-text-secondary);
+}
+
+.fgp-first-comment {
+  font-size: 12px;
+  color: var(--fgp-text-secondary);
+  margin-top: 4px;
+}
+
+/* Image set grid */
+.fgp-image-set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.fgp-image-set-card {
+  background: var(--fgp-surface);
+  border: 1px solid var(--fgp-border);
+  border-radius: var(--fgp-radius);
+  overflow: hidden;
+  transition: var(--fgp-transition);
+}
+
+.fgp-image-set-card:hover {
+  box-shadow: var(--fgp-shadow);
+}
+
+.fgp-image-set-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.fgp-image-set-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fgp-text);
+}
+
+.fgp-image-set-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.fgp-image-set-preview {
+  aspect-ratio: 1;
+  background: var(--fgp-bg);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 2px;
+  overflow: hidden;
+}
+
+.fgp-image-set-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fgp-image-set-more {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.fgp-image-set-meta {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--fgp-text-secondary);
+  border-top: 1px solid var(--fgp-border);
+}
+
+.fgp-image-url-list {
+  margin-top: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.fgp-image-url-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: var(--fgp-bg);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.fgp-image-url-item img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.fgp-image-url-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--fgp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fgp-action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.fgp-sync-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.fgp-sync-btn {
+  min-height: 44px;
+}
+
+.fgp-action-buttons-sm {
+  display: flex;
+  gap: 4px;
 }

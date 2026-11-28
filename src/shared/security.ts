@@ -39,7 +39,7 @@ export function validateImageSetId(input: string): boolean {
 }
 
 export function validateShareId(input: string): boolean {
-  return /^share_\d+_[a-zA-Z0-9]{1,50}$/.test(input);
+  return /^share_[a-zA-Z0-9]+_[a-zA-Z0-9]{1,50}$/.test(input);
 }
 
 export function sanitizeCaption(input: string): string {
@@ -208,9 +208,57 @@ export function sanitizeSettings(input: unknown): Partial<ShareSettings> {
   return sanitized;
 }
 
+export function sanitizeUserSettings(input: unknown): Partial<UserSettings> {
+  const sanitized: Partial<UserSettings> = {};
+  const obj = input as Record<string, unknown>;
+  if (obj.theme && ['light', 'dark', 'system'].includes(obj.theme as string)) {
+    sanitized.theme = obj.theme as UserSettings['theme'];
+  }
+  if (typeof obj.language === 'string') {
+    sanitized.language = obj.language.slice(0, 10);
+  }
+  if (typeof obj.showShareButton === 'boolean') {
+    sanitized.showShareButton = obj.showShareButton;
+  }
+  if (
+    obj.shareButtonPosition &&
+    ['after_share', 'before_share', 'floating'].includes(obj.shareButtonPosition as string)
+  ) {
+    sanitized.shareButtonPosition = obj.shareButtonPosition as UserSettings['shareButtonPosition'];
+  }
+  if (typeof obj.autoDetectGroups === 'boolean') {
+    sanitized.autoDetectGroups = obj.autoDetectGroups;
+  }
+  if (typeof obj.confirmBeforeShare === 'boolean') {
+    sanitized.confirmBeforeShare = obj.confirmBeforeShare;
+  }
+  if (typeof obj.soundNotifications === 'boolean') {
+    sanitized.soundNotifications = obj.soundNotifications;
+  }
+  if (typeof obj.desktopNotifications === 'boolean') {
+    sanitized.desktopNotifications = obj.desktopNotifications;
+  }
+  if (typeof obj.analyticsOptIn === 'boolean') {
+    sanitized.analyticsOptIn = obj.analyticsOptIn;
+  }
+  if (obj.plan && ['free', 'pro'].includes(obj.plan as string)) {
+    sanitized.plan = obj.plan as UserSettings['plan'];
+  }
+  return sanitized;
+}
+
 export function sanitizeGroupList(input: unknown): Partial<GroupList> {
   const sanitized: Partial<GroupList> = {};
   const obj = input as Record<string, unknown>;
+  if (typeof obj.id === 'string' && validateGroupListId(obj.id)) {
+    sanitized.id = obj.id;
+  }
+  if (obj.platform && ['facebook', 'whatsapp', 'messenger'].includes(obj.platform as string)) {
+    sanitized.platform = obj.platform as GroupList['platform'];
+  }
+  if (typeof obj.createdAt === 'number') {
+    sanitized.createdAt = obj.createdAt;
+  }
   if (typeof obj.name === 'string') {
     sanitized.name = sanitizeGroupName(obj.name);
   }
@@ -228,6 +276,12 @@ export function sanitizeGroupList(input: unknown): Partial<GroupList> {
 export function sanitizeTemplate(input: unknown): Partial<Template> {
   const sanitized: Partial<Template> = {};
   const obj = input as Record<string, unknown>;
+  if (typeof obj.id === 'string' && validateTemplateId(obj.id)) {
+    sanitized.id = obj.id;
+  }
+  if (typeof obj.createdAt === 'number') {
+    sanitized.createdAt = obj.createdAt;
+  }
   if (typeof obj.name === 'string') {
     sanitized.name = sanitizeTemplateName(obj.name);
   }
@@ -244,6 +298,12 @@ export function sanitizeTemplate(input: unknown): Partial<Template> {
 export function sanitizeImageSet(input: unknown): Partial<ImageSet> {
   const sanitized: Partial<ImageSet> = {};
   const obj = input as Record<string, unknown>;
+  if (typeof obj.id === 'string' && validateImageSetId(obj.id)) {
+    sanitized.id = obj.id;
+  }
+  if (typeof obj.createdAt === 'number') {
+    sanitized.createdAt = obj.createdAt;
+  }
   if (typeof obj.name === 'string') {
     sanitized.name = sanitizeImageSetName(obj.name);
   }

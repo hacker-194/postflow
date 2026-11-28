@@ -1,310 +1,312 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Users,
   Plus,
-  Edit,
   Trash2,
-  Search,
-  Save,
+  Edit,
   Download,
   Upload,
-  Settings,
+  Trash,
+  X,
   Image,
   FileText,
-  List,
+  Loader2,
+  Save,
+  Facebook,
+  MessageSquare,
+  Globe,
 } from 'lucide-react';
-import { DEFAULT_USER_SETTINGS } from '../shared/types';
-import type { Group, GroupList, Template, ImageSet, UserSettings } from '../shared/types';
-import {
-  sanitizeGroupList,
-  sanitizeTemplate,
-  sanitizeImageSet,
-  sanitizeCaption,
-  sanitizeComment,
-  sanitizeGroupName,
-  sanitizeTemplateName,
-  sanitizeImageSetName,
-} from '../shared/security';
+import type {
+  Group,
+  GroupList,
+  Template,
+  ImageSet,
+  ShareSettings,
+  UserSettings,
+  Platform,
+} from '../shared/types';
 
-const COLORS = [
-  '#1877f2',
-  '#42b72a',
-  '#e63946',
-  '#f77f00',
-  '#9b59b6',
-  '#00b4d8',
-  '#e85d75',
-  '#2ec4b6',
-] as const;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+interface OptionsState {
+  activeTab: 'groups' | 'templates' | 'images' | 'settings';
+  groups: Group[];
+  groupLists: GroupList[];
+  templates: Template[];
+  imageSets: ImageSet[];
+  userSettings: UserSettings;
+  loading: boolean;
+  syncing: { [platform: string]: boolean };
+  lastSyncResult: string | null;
+  editingGroup: Group | null;
+  editingTemplate: Template | null;
+  editingImageSet: ImageSet | null;
+  editingList: GroupList | null;
+  showGroupModal: boolean;
+  showTemplateModal: boolean;
+  showImageSetModal: boolean;
+  showListModal: boolean;
+  toast: { message: string; type: 'success' | 'error' | 'info' } | null;
+  confirmDialog: {
+    message: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null;
 }
 
-function getPlatformColor(platform: string): string {
-  switch (platform) {
-    case 'facebook':
-      return '#1877f2';
-    case 'whatsapp':
-      return '#25d366';
-    case 'messenger':
-      return '#0084ff';
-    default:
-      return '#666';
-  }
+const DEFAULT_SHARE_SETTINGS: ShareSettings = {
+  mode: 'share_original',
+  caption: '',
+  firstComment: '',
+  useSpintax: false,
+  delayBetweenGroups: 90000,
+  safetyLevel: 'balanced',
+  overnightPause: true,
+  overnightStart: '22:00',
+  overnightEnd: '07:00',
+  maxPostsPerDay: 20,
+};
+
+const DEFAULT_USER_SETTINGS: UserSettings = {
+  theme: 'system',
+  language: 'en',
+  showShareButton: true,
+  shareButtonPosition: 'after_share',
+  autoDetectGroups: true,
+  confirmBeforeShare: true,
+  soundNotifications: true,
+  desktopNotifications: true,
+  analyticsOptIn: false,
+};
+
+const PLATFORM_LABELS: Record<Platform, string> = {
+  facebook: 'Facebook',
+  whatsapp: 'WhatsApp',
+  messenger: 'Messenger',
+};
+
+const PLATFORM_COLORS: Record<Platform, string> = {
+  facebook: '#1877f2',
+  whatsapp: '#25d366',
+  messenger: '#0084ff',
+};
+
+const PLATFORM_ICONS: Record<Platform, React.ReactNode> = {
+  facebook: <Facebook size={16} />,
+  whatsapp: <MessageSquare size={16} />,
+  messenger: <Globe size={16} />,
+};
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleString();
 }
 
-function collectionValues(value: unknown): unknown[] {
-  return isRecord(value) ? Object.values(value) : [];
-}
-
-function normalizeGroups(value: unknown): Group[] {
-  return collectionValues(value).flatMap(item => {
-    if (!isRecord(item) || typeof item.id !== 'string' || typeof item.name !== 'string') {
-      return [];
-    }
-
-    const platform =
-      item.platform === 'facebook' || item.platform === 'whatsapp' || item.platform === 'messenger'
-        ? item.platform
-        : 'facebook';
-
-    return [
-      {
-        id: item.id,
-        name: item.name,
-        url: typeof item.url === 'string' ? item.url : '',
-        platform,
-        memberCount: typeof item.memberCount === 'number' ? item.memberCount : undefined,
-        isAdmin: typeof item.isAdmin === 'boolean' ? item.isAdmin : undefined,
-        category: typeof item.category === 'string' ? item.category : undefined,
-        addedAt: typeof item.addedAt === 'number' ? item.addedAt : Date.now(),
-        lastPostedAt: typeof item.lastPostedAt === 'number' ? item.lastPostedAt : undefined,
-      },
-    ];
-  });
-}
-
-function normalizeGroupLists(value: unknown): GroupList[] {
-  return collectionValues(value).flatMap(item => {
-    if (!isRecord(item) || typeof item.id !== 'string' || typeof item.name !== 'string') {
-      return [];
-    }
-
-    const platform =
-      item.platform === 'facebook' || item.platform === 'whatsapp' || item.platform === 'messenger'
-        ? item.platform
-        : 'facebook';
-
-    return [
-      {
-        id: item.id,
-        name: item.name,
-        groupIds: Array.isArray(item.groupIds)
-          ? item.groupIds.filter((id): id is string => typeof id === 'string')
-          : [],
-        color:
-          typeof item.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(item.color)
-            ? item.color
-            : COLORS[0],
-        platform,
-        createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-        updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
-      },
-    ];
-  });
-}
-
-function normalizeTemplates(value: unknown): Template[] {
-  return collectionValues(value).flatMap(item => {
-    if (!isRecord(item) || typeof item.id !== 'string' || typeof item.name !== 'string') {
-      return [];
-    }
-
-    return [
-      {
-        id: item.id,
-        name: item.name,
-        caption: typeof item.caption === 'string' ? item.caption : '',
-        firstComment: typeof item.firstComment === 'string' ? item.firstComment : undefined,
-        settings: isRecord(item.settings) ? (item.settings as Template['settings']) : {},
-        createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-        updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
-      },
-    ];
-  });
-}
-
-function normalizeImageSets(value: unknown): ImageSet[] {
-  return collectionValues(value).flatMap(item => {
-    if (!isRecord(item) || typeof item.id !== 'string' || typeof item.name !== 'string') {
-      return [];
-    }
-
-    return [
-      {
-        id: item.id,
-        name: item.name,
-        imageUrls: Array.isArray(item.imageUrls)
-          ? item.imageUrls.filter((url): url is string => typeof url === 'string')
-          : [],
-        createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-      },
-    ];
-  });
-}
-
-function normalizeUserSettings(value: unknown): UserSettings {
-  const settings = isRecord(value) ? value : {};
-  return {
-    theme:
-      settings.theme === 'light' || settings.theme === 'dark' || settings.theme === 'system'
-        ? settings.theme
-        : DEFAULT_USER_SETTINGS.theme,
-    language:
-      typeof settings.language === 'string' ? settings.language : DEFAULT_USER_SETTINGS.language,
-    showShareButton:
-      typeof settings.showShareButton === 'boolean'
-        ? settings.showShareButton
-        : DEFAULT_USER_SETTINGS.showShareButton,
-    shareButtonPosition:
-      settings.shareButtonPosition === 'before_share' ||
-      settings.shareButtonPosition === 'floating' ||
-      settings.shareButtonPosition === 'after_share'
-        ? settings.shareButtonPosition
-        : DEFAULT_USER_SETTINGS.shareButtonPosition,
-    autoDetectGroups:
-      typeof settings.autoDetectGroups === 'boolean'
-        ? settings.autoDetectGroups
-        : DEFAULT_USER_SETTINGS.autoDetectGroups,
-    confirmBeforeShare:
-      typeof settings.confirmBeforeShare === 'boolean'
-        ? settings.confirmBeforeShare
-        : DEFAULT_USER_SETTINGS.confirmBeforeShare,
-    soundNotifications:
-      typeof settings.soundNotifications === 'boolean'
-        ? settings.soundNotifications
-        : DEFAULT_USER_SETTINGS.soundNotifications,
-    desktopNotifications:
-      typeof settings.desktopNotifications === 'boolean'
-        ? settings.desktopNotifications
-        : DEFAULT_USER_SETTINGS.desktopNotifications,
-    analyticsOptIn:
-      typeof settings.analyticsOptIn === 'boolean'
-        ? settings.analyticsOptIn
-        : DEFAULT_USER_SETTINGS.analyticsOptIn,
-  };
+function generateId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<
-    'groups' | 'lists' | 'templates' | 'images' | 'settings'
-  >('lists');
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [groupLists, setGroupLists] = useState<GroupList[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [imageSets, setImageSets] = useState<ImageSet[]>([]);
-  const [userSettings, setUserSettings] = useState<UserSettings>({
-    theme: 'system',
-    language: 'en',
-    showShareButton: true,
-    shareButtonPosition: 'after_share',
-    autoDetectGroups: true,
-    confirmBeforeShare: true,
-    soundNotifications: true,
-    desktopNotifications: true,
-    analyticsOptIn: false,
+  const [state, setState] = useState<OptionsState>({
+    activeTab: 'groups',
+    groups: [],
+    groupLists: [],
+    templates: [],
+    imageSets: [],
+    userSettings: DEFAULT_USER_SETTINGS,
+    loading: true,
+    syncing: {},
+    lastSyncResult: null,
+    editingGroup: null,
+    editingTemplate: null,
+    editingImageSet: null,
+    editingList: null,
+    showGroupModal: false,
+    showTemplateModal: false,
+    showImageSetModal: false,
+    showListModal: false,
+    toast: null,
+    confirmDialog: null,
   });
 
-  const [editingList, setEditingList] = useState<GroupList | undefined>(undefined);
-  const [editingTemplate, setEditingTemplate] = useState<Template | undefined>(undefined);
-  const [editingImageSet, setEditingImageSet] = useState<ImageSet | undefined>(undefined);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [syncing, setSyncing] = useState(false);
+  const unwrap = <T,>(res: { success: boolean; data?: T; error?: string }): T | undefined => {
+    if (!res?.success) {
+      console.error('Message failed:', res?.error);
+      return undefined;
+    }
+    return res.data;
+  };
 
-  useEffect(() => {
-    loadAllData();
+  const send = async (message: Record<string, unknown>): Promise<boolean> => {
+    const res = await chrome.runtime.sendMessage(message);
+    if (!res?.success) {
+      setState(s => ({
+        ...s,
+        toast: { message: res?.error || 'Something went wrong. Please try again.', type: 'error' },
+      }));
+      return false;
+    }
+    return true;
+  };
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setState(s => ({ ...s, toast: { message, type } }));
+    setTimeout(() => setState(s => ({ ...s, toast: null })), 5000);
   }, []);
 
-  async function loadAllData() {
+  const showConfirm = useCallback(
+    (message: string, onConfirm: () => void, onCancel: () => void = () => {}) => {
+      setState(s => ({ ...s, confirmDialog: { message, onConfirm, onCancel } }));
+    },
+    []
+  );
+
+  const closeConfirm = useCallback(() => {
+    setState(s => ({ ...s, confirmDialog: null }));
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setState(s => ({ ...s, loading: true }));
     try {
-      const [groupsData, listsData, templatesData, imagesData, settingsData] = await Promise.all([
+      const [groups, groupLists, templates, imageSets, userSettings] = await Promise.all([
         chrome.runtime.sendMessage({ type: 'GET_ALL_GROUPS' }),
         chrome.runtime.sendMessage({ type: 'GET_GROUP_LISTS' }),
         chrome.runtime.sendMessage({ type: 'GET_TEMPLATES' }),
         chrome.runtime.sendMessage({ type: 'GET_IMAGE_SETS' }),
         chrome.runtime.sendMessage({ type: 'GET_USER_SETTINGS' }),
       ]);
-      setGroups(normalizeGroups(groupsData));
-      setGroupLists(normalizeGroupLists(listsData));
-      setTemplates(normalizeTemplates(templatesData));
-      setImageSets(normalizeImageSets(imagesData));
-      setUserSettings(normalizeUserSettings(settingsData));
+      setState(s => ({
+        ...s,
+        groups: unwrap<Group[]>(groups) || [],
+        groupLists: unwrap<GroupList[]>(groupLists) || [],
+        templates: unwrap<Template[]>(templates) || [],
+        imageSets: unwrap<ImageSet[]>(imageSets) || [],
+        userSettings: unwrap<UserSettings>(userSettings) || s.userSettings,
+        loading: false,
+      }));
     } catch (error) {
       console.error('Failed to load data:', error);
+      setState(s => ({ ...s, loading: false }));
     }
-  }
+  }, []);
 
-  async function saveGroupList(list: GroupList) {
-    const sanitized = sanitizeGroupList(list);
-    await chrome.runtime.sendMessage({ type: 'SAVE_GROUP_LIST', list: sanitized });
-    loadAllData();
-    setEditingList(undefined);
-  }
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  async function deleteGroupList(id: string) {
-    if (confirm('Delete this group list?')) {
-      await chrome.runtime.sendMessage({ type: 'DELETE_GROUP_LIST', id });
-      loadAllData();
-    }
-  }
+  const handleSyncGroups = async (platform: Platform) => {
+    const messageType =
+      platform === 'facebook'
+        ? 'SYNC_GROUPS'
+        : platform === 'whatsapp'
+          ? 'SYNC_WHATSAPP_GROUPS'
+          : 'SYNC_MESSENGER_GROUPS';
+    const url =
+      platform === 'facebook'
+        ? 'https://facebook.com/groups/feed/'
+        : platform === 'whatsapp'
+          ? 'https://web.whatsapp.com'
+          : 'https://messenger.com';
 
-  async function saveTemplate(template: Template) {
-    const sanitized = sanitizeTemplate(template);
-    await chrome.runtime.sendMessage({ type: 'SAVE_TEMPLATE', template: sanitized });
-    loadAllData();
-    setEditingTemplate(undefined);
-  }
+    setState(s => ({ ...s, syncing: { ...s.syncing, [platform]: true }, lastSyncResult: null }));
 
-  async function deleteTemplate(id: string) {
-    if (confirm('Delete this template?')) {
-      await chrome.runtime.sendMessage({ type: 'DELETE_TEMPLATE', id });
-      loadAllData();
-    }
-  }
-
-  async function saveImageSet(imageSet: ImageSet) {
-    const sanitized = sanitizeImageSet(imageSet);
-    await chrome.runtime.sendMessage({ type: 'SAVE_IMAGE_SET', imageSet: sanitized });
-    loadAllData();
-    setEditingImageSet(undefined);
-  }
-
-  async function deleteImageSet(id: string) {
-    if (confirm('Delete this image set?')) {
-      await chrome.runtime.sendMessage({ type: 'DELETE_IMAGE_SET', id });
-      loadAllData();
-    }
-  }
-
-  async function syncGroupsFromFacebook() {
-    setSyncing(true);
     try {
-      const result = await chrome.runtime.sendMessage({ type: 'SYNC_GROUPS' });
-      if (result.success && result.groups) {
-        alert(`Found ${result.groups.length} groups!`);
-        loadAllData();
+      await chrome.tabs.create({ url, active: true });
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      const result = await chrome.runtime.sendMessage({ type: messageType });
+      if (result?.success && result.groups) {
+        setState(s => ({
+          ...s,
+          lastSyncResult: `✅ Found ${result.groups.length} ${PLATFORM_LABELS[platform]} groups!`,
+        }));
+        refresh();
       } else {
-        alert("Failed to sync groups. Make sure you're on Facebook.");
+        setState(s => ({
+          ...s,
+          lastSyncResult: `❌ ${result.error || 'Failed - make sure page loaded fully'}`,
+        }));
       }
     } catch (error) {
-      alert('Sync failed: ' + error);
+      setState(s => ({ ...s, lastSyncResult: `❌ ${error}` }));
+    } finally {
+      setState(s => ({ ...s, syncing: { ...s.syncing, [platform]: false } }));
     }
-    setSyncing(false);
-  }
+  };
 
-  async function exportData() {
+  const handleSaveGroup = async (group: Group) => {
+    if (!(await send({ type: 'SAVE_GROUP', group }))) return;
+    setState(s => ({ ...s, showGroupModal: false, editingGroup: null }));
+    refresh();
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    showConfirm(
+      'Delete this group?',
+      async () => {
+        await chrome.runtime.sendMessage({ type: 'DELETE_GROUP', id });
+        refresh();
+        showToast('Group deleted', 'success');
+      },
+      closeConfirm
+    );
+  };
+
+  const handleSaveGroupList = async (list: GroupList) => {
+    if (!(await send({ type: 'SAVE_GROUP_LIST', list }))) return;
+    setState(s => ({ ...s, showListModal: false, editingList: null }));
+    refresh();
+    showToast('Group list saved', 'success');
+  };
+
+  const handleDeleteGroupList = async (id: string) => {
+    showConfirm(
+      'Delete this group list?',
+      async () => {
+        await chrome.runtime.sendMessage({ type: 'DELETE_GROUP_LIST', id });
+        refresh();
+        showToast('Group list deleted', 'success');
+      },
+      closeConfirm
+    );
+  };
+
+  const handleSaveTemplate = async (template: Template) => {
+    if (!(await send({ type: 'SAVE_TEMPLATE', template }))) return;
+    setState(s => ({ ...s, showTemplateModal: false, editingTemplate: null }));
+    refresh();
+    showToast('Template saved', 'success');
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    showConfirm(
+      'Delete this template?',
+      async () => {
+        await chrome.runtime.sendMessage({ type: 'DELETE_TEMPLATE', id });
+        refresh();
+        showToast('Template deleted', 'success');
+      },
+      closeConfirm
+    );
+  };
+
+  const handleSaveImageSet = async (imageSet: ImageSet) => {
+    if (!(await send({ type: 'SAVE_IMAGE_SET', imageSet }))) return;
+    setState(s => ({ ...s, showImageSetModal: false, editingImageSet: null }));
+    refresh();
+    showToast('Image set saved', 'success');
+  };
+
+  const handleDeleteImageSet = async (id: string) => {
+    showConfirm(
+      'Delete this image set?',
+      async () => {
+        await chrome.runtime.sendMessage({ type: 'DELETE_IMAGE_SET', id });
+        refresh();
+        showToast('Image set deleted', 'success');
+      },
+      closeConfirm
+    );
+  };
+
+  const handleExportData = async () => {
     const data = await chrome.runtime.sendMessage({ type: 'EXPORT_DATA' });
     if (data) {
       const blob = new Blob([data], { type: 'application/json' });
@@ -314,660 +316,521 @@ function App() {
       a.download = `fgp-backup-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      showToast('Data exported successfully', 'success');
+    } else {
+      showToast('No data to export', 'error');
     }
-  }
+  };
 
-  async function importData(file: File) {
-    try {
-      const text = await file.text();
-      const result = await chrome.runtime.sendMessage({ type: 'IMPORT_DATA', data: text });
-      if (!result?.success) {
-        alert(result?.error || 'Import failed. Please select a valid Free Group Poster backup.');
-        return;
+  const handleImportData = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async e => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const text = await file.text();
+        await chrome.runtime.sendMessage({ type: 'IMPORT_DATA', data: text });
+        showToast('Data imported successfully!', 'success');
+        refresh();
       }
+    };
+    input.click();
+  };
 
-      alert('Data imported successfully!');
-      await loadAllData();
-    } catch (error) {
-      console.error('Failed to import data:', error);
-      alert('Import failed. Please check that the selected backup is valid.');
-    }
+  const handleClearAllData = () => {
+    showConfirm(
+      'This will delete ALL your groups, lists, templates, images, history, and settings. Are you sure?',
+      async () => {
+        await chrome.runtime.sendMessage({ type: 'CLEAR_ALL_DATA' });
+        showToast('All data cleared!', 'success');
+        refresh();
+      },
+      closeConfirm
+    );
+  };
+
+  const openGroupModal = (group?: Group) => {
+    setState(s => ({
+      ...s,
+      editingGroup: group || {
+        id: '',
+        name: '',
+        url: '',
+        platform: 'facebook',
+        addedAt: Date.now(),
+      },
+      showGroupModal: true,
+    }));
+  };
+
+  const openListModal = (list?: GroupList) => {
+    const newList: GroupList = list || {
+      id: generateId('list'),
+      name: '',
+      groupIds: [],
+      color: '#1877f2',
+      platform: 'facebook',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    setState(s => ({ ...s, editingList: newList, showListModal: true }));
+  };
+
+  const openTemplateModal = (template?: Template) => {
+    const newTemplate: Template = template || {
+      id: generateId('template'),
+      name: '',
+      caption: '',
+      firstComment: '',
+      settings: DEFAULT_SHARE_SETTINGS,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    setState(s => ({ ...s, editingTemplate: newTemplate, showTemplateModal: true }));
+  };
+
+  const openImageSetModal = (imageSet?: ImageSet) => {
+    const newImageSet: ImageSet = imageSet || {
+      id: generateId('images'),
+      name: '',
+      imageUrls: [],
+      createdAt: Date.now(),
+    };
+    setState(s => ({ ...s, editingImageSet: newImageSet, showImageSetModal: true }));
+  };
+
+  const closeModals = () => {
+    setState(s => ({
+      ...s,
+      showGroupModal: false,
+      showTemplateModal: false,
+      showImageSetModal: false,
+      showListModal: false,
+      editingGroup: null,
+      editingTemplate: null,
+      editingImageSet: null,
+      editingList: null,
+    }));
+  };
+
+  if (state.loading) {
+    return (
+      <div className="fgp-options-loading">
+        <Loader2 size={32} className="fgp-spin" />
+        <p>Loading...</p>
+      </div>
+    );
   }
-
-  const normalizedSearchQuery = searchQuery.toLowerCase();
-  const filteredGroups = groups.filter(group =>
-    group.name.toLowerCase().includes(normalizedSearchQuery)
-  );
-  const filteredLists = groupLists.filter(list =>
-    list.name.toLowerCase().includes(normalizedSearchQuery)
-  );
 
   return (
     <div className="fgp-options">
-      <header className="fgp-header">
-        <div className="fgp-header-left">
-          <Users className="fgp-logo-icon" size={28} />
+      <header className="fgp-options-header">
+        <div className="fgp-options-title">
+          <Users size={28} />
           <h1>Free Group Poster</h1>
-          <span className="fgp-badge">Options</span>
         </div>
-        <div className="fgp-header-right">
-          <button className="fgp-header-btn" onClick={exportData} title="Export Data">
-            <Download size={20} />
-          </button>
-          <button
-            className="fgp-header-btn"
-            onClick={() => document.getElementById('import-file')?.click()}
-            title="Import Data"
-          >
-            <Upload size={20} />
-          </button>
-          <input
-            type="file"
-            id="import-file"
-            accept=".json"
-            hidden
-            onChange={e => e.target.files?.[0] && importData(e.target.files[0])}
-          />
-        </div>
+        <div className="fgp-options-version">v1.0.0</div>
       </header>
 
-      <nav className="fgp-nav">
+      <nav className="fgp-options-nav" role="tablist" aria-label="Main navigation">
         <button
-          className={activeTab === 'lists' ? 'active' : ''}
-          onClick={() => setActiveTab('lists')}
+          role="tab"
+          id="tab-groups"
+          aria-controls="panel-groups"
+          aria-selected={state.activeTab === 'groups'}
+          className={`fgp-nav-tab ${state.activeTab === 'groups' ? 'active' : ''}`}
+          onClick={() => setState(s => ({ ...s, activeTab: 'groups' }))}
         >
-          <List size={20} /> Lists
+          <Users size={18} aria-hidden="true" /> Groups & Lists
         </button>
         <button
-          className={activeTab === 'groups' ? 'active' : ''}
-          onClick={() => setActiveTab('groups')}
+          role="tab"
+          id="tab-templates"
+          aria-controls="panel-templates"
+          aria-selected={state.activeTab === 'templates'}
+          className={`fgp-nav-tab ${state.activeTab === 'templates' ? 'active' : ''}`}
+          onClick={() => setState(s => ({ ...s, activeTab: 'templates' }))}
         >
-          <Users size={20} /> Groups
+          <FileText size={18} aria-hidden="true" /> Templates
         </button>
         <button
-          className={activeTab === 'templates' ? 'active' : ''}
-          onClick={() => setActiveTab('templates')}
+          role="tab"
+          id="tab-images"
+          aria-controls="panel-images"
+          aria-selected={state.activeTab === 'images'}
+          className={`fgp-nav-tab ${state.activeTab === 'images' ? 'active' : ''}`}
+          onClick={() => setState(s => ({ ...s, activeTab: 'images' }))}
         >
-          <FileText size={20} /> Templates
+          <Image size={18} aria-hidden="true" /> Image Sets
         </button>
         <button
-          className={activeTab === 'images' ? 'active' : ''}
-          onClick={() => setActiveTab('images')}
+          role="tab"
+          id="tab-settings"
+          aria-controls="panel-settings"
+          aria-selected={state.activeTab === 'settings'}
+          className={`fgp-nav-tab ${state.activeTab === 'settings' ? 'active' : ''}`}
+          onClick={() => setState(s => ({ ...s, activeTab: 'settings' }))}
         >
-          <Image size={20} /> Images
-        </button>
-        <button
-          className={activeTab === 'settings' ? 'active' : ''}
-          onClick={() => setActiveTab('settings')}
-        >
-          <Settings size={20} /> Settings
+          Settings
         </button>
       </nav>
 
-      <main className="fgp-main">
-        {activeTab === 'lists' && (
-          <ListsTab
-            lists={filteredLists}
-            groups={groups}
-            editingList={editingList}
-            setEditingList={setEditingList}
-            onSave={saveGroupList}
-            onDelete={deleteGroupList}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-          />
+      <main className="fgp-options-main" role="main">
+        {state.lastSyncResult && (
+          <div
+            className={`fgp-toast ${state.lastSyncResult.startsWith('✅') ? 'success' : 'error'}`}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {state.lastSyncResult}
+          </div>
         )}
-        {activeTab === 'groups' && (
-          <GroupsTab
-            groups={filteredGroups}
-            groupLists={groupLists}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            syncing={syncing}
-            onSync={syncGroupsFromFacebook}
-            loadAllData={loadAllData}
-          />
-        )}
-        {activeTab === 'templates' && (
-          <TemplatesTab
-            templates={templates}
-            editingTemplate={editingTemplate}
-            setEditingTemplate={setEditingTemplate}
-            onSave={saveTemplate}
-            onDelete={deleteTemplate}
-          />
-        )}
-        {activeTab === 'images' && (
-          <ImagesTab
-            imageSets={imageSets}
-            editingImageSet={editingImageSet}
-            setEditingImageSet={setEditingImageSet}
-            onSave={saveImageSet}
-            onDelete={deleteImageSet}
-          />
-        )}
-        {activeTab === 'settings' && (
-          <SettingsTab settings={userSettings} setSettings={setUserSettings} />
-        )}
-      </main>
-    </div>
-  );
-}
 
-interface ListsTabProps {
-  lists: GroupList[];
-  groups: Group[];
-  editingList: GroupList | undefined;
-  setEditingList: (list: GroupList | undefined) => void;
-  onSave: (list: GroupList) => void;
-  onDelete: (id: string) => void;
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
-}
-
-function ListsTab({
-  lists,
-  groups,
-  editingList,
-  setEditingList,
-  onSave,
-  onDelete,
-  searchQuery,
-  setSearchQuery,
-}: ListsTabProps) {
-  const [newListName, setNewListName] = useState('');
-  const [newListColor, setNewListColor] = useState<string>(COLORS[0]);
-  const [newListPlatform, setNewListPlatform] = useState<GroupList['platform']>('facebook');
-  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newListName.trim()) return;
-    const list: GroupList = {
-      id: editingList?.id || `list_${Date.now()}`,
-      name: newListName.trim(),
-      groupIds: selectedGroupIds,
-      color: newListColor,
-      platform: newListPlatform,
-      createdAt: editingList?.createdAt || Date.now(),
-      updatedAt: Date.now(),
-    };
-    onSave(list);
-    setNewListName('');
-    setSelectedGroupIds([]);
-    setNewListPlatform('facebook');
-  };
-
-  return (
-    <div className="fgp-tab-panel">
-      <div className="fgp-panel-header">
-        <h2>Group Lists</h2>
-        <button
-          className="fgp-btn fgp-btn-primary"
-          onClick={() =>
-            setEditingList({
-              id: `list_${Date.now()}`,
-              name: '',
-              groupIds: [],
-              color: COLORS[0],
-              platform: 'facebook' as const,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            })
-          }
-        >
-          <Plus size={18} /> New List
-        </button>
-      </div>
-
-      {editingList ? (
-        <ListForm
-          list={editingList}
-          groups={groups}
-          selectedGroupIds={selectedGroupIds}
-          setSelectedGroupIds={setSelectedGroupIds}
-          newListName={newListName}
-          setNewListName={setNewListName}
-          newListColor={newListColor}
-          setNewListColor={setNewListColor}
-          newListPlatform={newListPlatform}
-          setNewListPlatform={setNewListPlatform}
-          onSubmit={handleSubmit}
-          onCancel={() => {
-            setEditingList(undefined);
-            setNewListName('');
-            setSelectedGroupIds([]);
-            setNewListPlatform('facebook');
-          }}
-        />
-      ) : (
-        <>
-          <div className="fgp-search">
-            <Search size={18} />
-            <input
-              type="text"
-              placeholder="Search lists..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+        {state.activeTab === 'groups' && (
+          <div id="panel-groups" role="tabpanel" aria-labelledby="tab-groups" tabIndex={0}>
+            <GroupsTab
+              groups={state.groups}
+              groupLists={state.groupLists}
+              onSyncGroups={handleSyncGroups}
+              onSaveGroup={handleSaveGroup}
+              onDeleteGroup={handleDeleteGroup}
+              onSaveGroupList={handleSaveGroupList}
+              onDeleteGroupList={handleDeleteGroupList}
+              onOpenGroupModal={openGroupModal}
+              onOpenListModal={openListModal}
+              syncing={state.syncing}
             />
           </div>
-          <div className="fgp-list-grid">
-            {lists.map(list => (
-              <ListCard
-                key={list.id}
-                list={list}
-                groups={groups}
-                onEdit={setEditingList}
-                onDelete={onDelete}
-              />
-            ))}
-            {lists.length === 0 && (
-              <div className="fgp-empty-state">
-                <List size={48} />
-                <p>No lists yet</p>
-                <button
-                  className="fgp-btn fgp-btn-primary"
-                  onClick={() => setEditingList(undefined)}
-                >
-                  Create your first list
-                </button>
-              </div>
-            )}
+        )}
+
+        {state.activeTab === 'templates' && (
+          <div id="panel-templates" role="tabpanel" aria-labelledby="tab-templates" tabIndex={0}>
+            <TemplatesTab
+              templates={state.templates}
+              onSaveTemplate={handleSaveTemplate}
+              onDeleteTemplate={handleDeleteTemplate}
+              onOpenTemplateModal={openTemplateModal}
+            />
           </div>
-        </>
+        )}
+
+        {state.activeTab === 'images' && (
+          <div id="panel-images" role="tabpanel" aria-labelledby="tab-images" tabIndex={0}>
+            <ImagesTab
+              imageSets={state.imageSets}
+              onSaveImageSet={handleSaveImageSet}
+              onDeleteImageSet={handleDeleteImageSet}
+              onOpenImageSetModal={openImageSetModal}
+            />
+          </div>
+        )}
+
+        {state.activeTab === 'settings' && (
+          <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" tabIndex={0}>
+            <SettingsTab
+              userSettings={state.userSettings}
+              onExportData={handleExportData}
+              onImportData={handleImportData}
+              onClearAllData={handleClearAllData}
+            />
+          </div>
+        )}
+      </main>
+
+      {state.showGroupModal && state.editingGroup && (
+        <GroupModal group={state.editingGroup} onSave={handleSaveGroup} onClose={closeModals} />
+      )}
+
+      {state.showListModal && state.editingList && (
+        <GroupListModal
+          list={state.editingList}
+          groups={state.groups}
+          onSave={handleSaveGroupList}
+          onClose={closeModals}
+        />
+      )}
+
+      {state.showTemplateModal && state.editingTemplate && (
+        <TemplateModal
+          template={state.editingTemplate}
+          onSave={handleSaveTemplate}
+          onClose={closeModals}
+        />
+      )}
+
+      {state.showImageSetModal && state.editingImageSet && (
+        <ImageSetModal
+          imageSet={state.editingImageSet}
+          onSave={handleSaveImageSet}
+          onClose={closeModals}
+        />
+      )}
+
+      {state.toast && (
+        <div
+          className={`fgp-toast ${state.toast.type}`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {state.toast.message}
+        </div>
+      )}
+
+      {state.confirmDialog && (
+        <div className="fgp-modal-overlay" role="presentation">
+          <div
+            className="fgp-modal fgp-modal-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            tabIndex={-1}
+          >
+            <div className="fgp-modal-header">
+              <h3 id="confirm-title">Confirm</h3>
+            </div>
+            <div className="fgp-modal-body">
+              <p>{state.confirmDialog.message}</p>
+            </div>
+            <div className="fgp-modal-footer">
+              <button
+                className="fgp-btn fgp-btn-secondary"
+                onClick={() => {
+                  state.confirmDialog.onCancel();
+                  closeConfirm();
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="fgp-btn fgp-btn-danger"
+                onClick={() => {
+                  state.confirmDialog.onConfirm();
+                  closeConfirm();
+                }}
+                autoFocus
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
-}
-
-interface ListCardProps {
-  list: GroupList;
-  groups: Group[];
-  onEdit: (list: GroupList) => void;
-  onDelete: (id: string) => void;
-}
-
-function ListCard({ list, groups, onEdit, onDelete }: ListCardProps) {
-  const listGroups = list.groupIds
-    .map(id => groups.find(g => g.id === id))
-    .filter((g): g is Group => !!g);
-  return (
-    <div className="fgp-list-card" style={{ borderColor: list.color }}>
-      <div className="fgp-list-header" style={{ background: list.color }}>
-        <h3>{list.name}</h3>
-        <span>{list.groupIds.length} groups</span>
-      </div>
-      <div className="fgp-list-groups">
-        {listGroups.slice(0, 5).map(g => (
-          <span key={g.id} className="fgp-group-tag">
-            {g.name}
-          </span>
-        ))}
-        {listGroups.length > 5 && (
-          <span className="fgp-group-tag">+{listGroups.length - 5} more</span>
-        )}
-      </div>
-      <div className="fgp-list-actions">
-        <button className="fgp-btn-icon" onClick={() => onEdit(list)} title="Edit">
-          <Edit size={16} />
-        </button>
-        <button className="fgp-btn-icon" onClick={() => onDelete(list.id)} title="Delete">
-          <Trash2 size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-interface ListFormProps {
-  list: GroupList;
-  groups: Group[];
-  selectedGroupIds: string[];
-  setSelectedGroupIds: (ids: string[]) => void;
-  newListName: string;
-  setNewListName: (name: string) => void;
-  newListColor: string;
-  setNewListColor: (color: string) => void;
-  newListPlatform: GroupList['platform'];
-  setNewListPlatform: (p: GroupList['platform']) => void;
-  onSubmit: (e: React.FormEvent) => void;
-  onCancel: () => void;
-}
-
-function ListForm({
-  list,
-  groups,
-  selectedGroupIds,
-  setSelectedGroupIds,
-  newListName,
-  setNewListName,
-  newListColor,
-  setNewListColor,
-  newListPlatform,
-  setNewListPlatform,
-  onSubmit,
-  onCancel,
-}: ListFormProps) {
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewListName(sanitizeGroupName(e.target.value));
-  };
-
-  const platformGroups = groups.filter(g => g.platform === newListPlatform);
-
-  return (
-    <form className="fgp-form" onSubmit={onSubmit}>
-      <div className="fgp-form-row">
-        <label>List Name</label>
-        <input
-          type="text"
-          value={newListName}
-          onChange={handleNameChange}
-          placeholder="My Group List"
-          required
-        />
-      </div>
-      <div className="fgp-form-row">
-        <label>Platform</label>
-        <select
-          value={newListPlatform}
-          onChange={e => setNewListPlatform(e.target.value as GroupList['platform'])}
-          className="fgp-select"
-        >
-          <option value="facebook">Facebook Groups</option>
-          <option value="whatsapp">WhatsApp Groups</option>
-          <option value="messenger">Messenger Groups</option>
-        </select>
-      </div>
-      <div className="fgp-form-row">
-        <label>Color</label>
-        <div className="fgp-color-picker">
-          {COLORS.map(color => (
-            <button
-              key={color}
-              type="button"
-              className={`fgp-color-option ${newListColor === color ? 'selected' : ''}`}
-              style={{ background: color }}
-              onClick={() => setNewListColor(color)}
-            />
-          ))}
-        </div>
-      </div>
-      <div className="fgp-form-row">
-        <label>Groups ({selectedGroupIds.length} selected)</label>
-        <div className="fgp-group-multi-select">
-          {platformGroups.map(group => (
-            <label key={group.id} className="fgp-checkbox-label">
-              <input
-                type="checkbox"
-                checked={selectedGroupIds.includes(group.id)}
-                onChange={e =>
-                  setSelectedGroupIds(
-                    e.target.checked
-                      ? [...selectedGroupIds, group.id]
-                      : selectedGroupIds.filter(id => id !== group.id)
-                  )
-                }
-              />
-              <span>{group.name}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      <div className="fgp-form-actions">
-        <button type="button" className="fgp-btn fgp-btn-secondary" onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="submit" className="fgp-btn fgp-btn-primary">
-          <Save size={18} /> {list.id.startsWith('list_') ? 'Create' : 'Update'}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-interface GroupsTabProps {
-  groups: Group[];
-  groupLists: GroupList[];
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
-  syncing: boolean;
-  onSync: () => void;
-  loadAllData: () => void;
 }
 
 function GroupsTab({
   groups,
   groupLists,
-  searchQuery,
-  setSearchQuery,
+  onSyncGroups,
+  onDeleteGroup,
+  onDeleteGroupList,
+  onOpenGroupModal,
+  onOpenListModal,
   syncing,
-  onSync,
-  loadAllData,
-}: GroupsTabProps) {
-  const [syncPlatform, setSyncPlatform] = useState<Group['platform']>('facebook');
-  const [lastSyncResult, setLastSyncResult] = useState<string | null>(null);
+}: {
+  groups: Group[];
+  groupLists: GroupList[];
+  onSyncGroups: (platform: Platform) => void;
+  onDeleteGroup: (id: string) => void;
+  onDeleteGroupList: (id: string) => void;
+  onOpenGroupModal: (group?: Group) => void;
+  onOpenListModal: (list?: GroupList) => void;
+  syncing: { [platform: string]: boolean };
+}) {
+  const [filterPlatform, setFilterPlatform] = useState<Platform | 'all'>('all');
+  const [filterList, setFilterList] = useState<string>('all');
+  const platformGroups = ['facebook', 'whatsapp', 'messenger'] as Platform[];
 
-  const handleSync = async () => {
-    if (syncPlatform === 'facebook') {
-      onSync();
-    } else if (syncPlatform === 'whatsapp') {
-      setSyncing(true);
-      try {
-        const result = await chrome.runtime.sendMessage({ type: 'SYNC_WHATSAPP_GROUPS' });
-        if (result.success && result.groups) {
-          setLastSyncResult(`✅ Found ${result.groups.length} WhatsApp groups`);
-          loadAllData();
-        } else {
-          setLastSyncResult(`❌ ${result.error || 'Failed to sync'}`);
-        }
-      } catch (error) {
-        setLastSyncResult(`❌ ${error}`);
-      }
-      setSyncing(false);
-    } else if (syncPlatform === 'messenger') {
-      setSyncing(true);
-      try {
-        const result = await chrome.runtime.sendMessage({ type: 'SYNC_MESSENGER_GROUPS' });
-        if (result.success && result.groups) {
-          setLastSyncResult(`✅ Found ${result.groups.length} Messenger groups`);
-          loadAllData();
-        } else {
-          setLastSyncResult(`❌ ${result.error || 'Failed to sync'}`);
-        }
-      } catch (error) {
-        setLastSyncResult(`❌ ${error}`);
-      }
-      setSyncing(false);
-    }
-  };
-
-  const openAndSync = async (url: string) => {
-    setSyncing(true);
-    try {
-      await chrome.tabs.create({ url, active: true });
-      // Wait a bit for page to load, then sync
-      setTimeout(async () => {
-        try {
-          const result = await chrome.runtime.sendMessage(
-            syncPlatform === 'whatsapp'
-              ? { type: 'SYNC_WHATSAPP_GROUPS' }
-              : { type: 'SYNC_MESSENGER_GROUPS' }
-          );
-          if (result.success && result.groups) {
-            setLastSyncResult(
-              `✅ Found ${result.groups.length} ${syncPlatform === 'whatsapp' ? 'WhatsApp' : 'Messenger'} groups`
-            );
-            loadAllData();
-          } else {
-            setLastSyncResult(`❌ ${result.error || 'Failed - make sure page loaded fully'}`);
-          }
-        } catch (error) {
-          setLastSyncResult(`❌ ${error}`);
-        }
-        setSyncing(false);
-      }, 3000);
-    } catch (error) {
-      setSyncing(false);
-      setLastSyncResult(`❌ ${error}`);
-    }
-  };
+  const filteredGroups = groups.filter(g => {
+    const platformMatch = filterPlatform === 'all' || g.platform === filterPlatform;
+    const listMatch =
+      filterList === 'all' ||
+      groupLists.some(l => l.id === filterList && l.groupIds.includes(g.id));
+    return platformMatch && listMatch;
+  });
 
   return (
-    <div className="fgp-tab-panel">
-      <div className="fgp-panel-header">
-        <h2>Groups</h2>
-        <div className="fgp-sync-controls">
+    <div className="fgp-tab-content" role="region" aria-label="Groups and Lists">
+      <div className="fgp-section-header">
+        <h2>Groups & Lists</h2>
+        <div className="fgp-action-row">
+          <label htmlFor="filter-platform" className="fgp-sr-only">
+            Filter by platform
+          </label>
           <select
-            value={syncPlatform}
-            onChange={e => setSyncPlatform(e.target.value as Group['platform'])}
+            id="filter-platform"
+            value={filterPlatform}
+            onChange={e => setFilterPlatform(e.target.value as Platform | 'all')}
             className="fgp-select fgp-select-sm"
-            disabled={syncing}
           >
-            <option value="facebook">Facebook Groups</option>
-            <option value="whatsapp">WhatsApp Groups</option>
-            <option value="messenger">Messenger Groups</option>
+            <option value="all">All Platforms</option>
+            <option value="facebook">Facebook</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="messenger">Messenger</option>
           </select>
-          {syncPlatform === 'facebook' ? (
-            <button className="fgp-btn fgp-btn-primary" onClick={handleSync} disabled={syncing}>
-              {syncing ? (
-                <>
-                  <div className="fgp-spinner" /> Syncing...
-                </>
-              ) : (
-                <>
-                  <Users size={18} /> Sync Facebook Groups
-                </>
-              )}
-            </button>
-          ) : (
-            <>
-              <button
-                className="fgp-btn fgp-btn-secondary"
-                onClick={() =>
-                  openAndSync(
-                    syncPlatform === 'whatsapp'
-                      ? 'https://web.whatsapp.com'
-                      : 'https://messenger.com'
-                  )
-                }
-                disabled={syncing}
-              >
-                <Users size={18} /> Open & Sync
-              </button>
-              <button className="fgp-btn fgp-btn-primary" onClick={handleSync} disabled={syncing}>
-                {syncing ? (
-                  <>
-                    <div className="fgp-spinner" /> Syncing...
-                  </>
-                ) : (
-                  <>
-                    <Users size={18} /> Sync{' '}
-                    {syncPlatform === 'whatsapp' ? 'WhatsApp' : 'Messenger'} Groups
-                  </>
-                )}
-              </button>
-            </>
-          )}
+          <label htmlFor="filter-list" className="fgp-sr-only">
+            Filter by list
+          </label>
+          <select
+            id="filter-list"
+            value={filterList}
+            onChange={e => setFilterList(e.target.value)}
+            className="fgp-select fgp-select-sm"
+          >
+            <option value="all">All Lists</option>
+            {groupLists.map(l => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+          <button className="fgp-btn fgp-btn-primary fgp-btn-sm" onClick={() => onOpenGroupModal()}>
+            <Plus size={16} aria-hidden="true" /> Add Group
+          </button>
+          <button className="fgp-btn fgp-btn-primary fgp-btn-sm" onClick={() => onOpenListModal()}>
+            <Plus size={16} aria-hidden="true" /> New List
+          </button>
         </div>
       </div>
-      {lastSyncResult && (
-        <div
-          className="fgp-sync-result"
-          style={{ color: lastSyncResult.startsWith('✅') ? '#42b72a' : '#e63946' }}
-        >
-          {lastSyncResult}
+
+      <div className="fgp-sync-row" role="group" aria-label="Sync groups from platforms">
+        {platformGroups.map(platform => (
+          <button
+            key={platform}
+            className={`fgp-btn fgp-btn-secondary fgp-sync-btn ${syncing[platform] ? 'syncing' : ''}`}
+            onClick={() => onSyncGroups(platform)}
+            disabled={syncing[platform]}
+            style={{ borderColor: PLATFORM_COLORS[platform] }}
+            aria-busy={syncing[platform]}
+            aria-pressed={syncing[platform]}
+          >
+            {PLATFORM_ICONS[platform]}
+            {syncing[platform] ? (
+              <>
+                <Loader2 size={16} className="fgp-spin" aria-hidden="true" /> Syncing...
+              </>
+            ) : (
+              `Sync ${PLATFORM_LABELS[platform]}`
+            )}
+          </button>
+        ))}
+      </div>
+
+      {groupLists.length > 0 && (
+        <div className="fgp-section" aria-labelledby="lists-heading">
+          <h3 id="lists-heading">Group Lists ({groupLists.length})</h3>
+          <div className="fgp-list-grid" role="list" aria-label="Group lists">
+            {groupLists.map(list => (
+              <div
+                key={list.id}
+                className="fgp-list-card"
+                style={{ borderColor: list.color }}
+                role="listitem"
+              >
+                <div className="fgp-list-header" style={{ background: list.color }}>
+                  <span>{list.name}</span>
+                  <span className="fgp-list-count">{list.groupIds.length} groups</span>
+                </div>
+                <div
+                  className="fgp-list-platform"
+                  style={{ color: PLATFORM_COLORS[list.platform] || '#666' }}
+                  aria-label={`Platform: ${PLATFORM_LABELS[list.platform] || list.platform}`}
+                >
+                  {PLATFORM_LABELS[list.platform] || list.platform}
+                </div>
+                <div className="fgp-list-actions">
+                  <button
+                    className="fgp-btn-icon"
+                    onClick={() => onOpenListModal(list)}
+                    aria-label={`Edit list ${list.name}`}
+                  >
+                    <Edit size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    className="fgp-btn-icon fgp-btn-icon-danger"
+                    onClick={() => onDeleteGroupList(list.id)}
+                    aria-label={`Delete list ${list.name}`}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
-      <p className="fgp-hint">
-        {syncPlatform === 'facebook'
-          ? 'Open Facebook in another tab, go to your Groups page, then click Sync to import your groups.'
-          : syncPlatform === 'whatsapp'
-            ? 'Click "Open & Sync" to open WhatsApp Web and auto-sync, or open manually then click Sync.'
-            : 'Click "Open & Sync" to open Messenger and auto-sync, or open manually then click Sync.'}
-      </p>
-      <div className="fgp-search">
-        <Search size={18} />
-        <input
-          type="text"
-          placeholder="Search groups..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-        />
-      </div>
-      <div className="fgp-group-table">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Members</th>
-              <th>Lists</th>
-              <th>Last Posted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups
-              .filter(g => g.platform === syncPlatform)
-              .map(group => (
-                <tr key={group.id}>
-                  <td>
-                    <a href={group.url} target="_blank" rel="noopener">
-                      {group.name}
-                    </a>
-                  </td>
-                  <td>{group.memberCount ? group.memberCount.toLocaleString() : '—'}</td>
-                  <td>
-                    <span
-                      className="fgp-platform-badge"
-                      style={{ background: getPlatformColor(group.platform) }}
-                    >
-                      {group.platform === 'facebook'
-                        ? 'FB'
-                        : group.platform === 'whatsapp'
-                          ? 'WA'
-                          : 'MS'}
-                    </span>
-                    {groupLists
-                      .filter(l => l.groupIds.includes(group.id))
-                      .map(l => (
-                        <span
-                          key={l.id}
-                          className="fgp-group-tag"
-                          style={{ background: l.color + '20', color: l.color }}
-                        >
-                          {l.name}
-                        </span>
-                      ))}
-                  </td>
-                  <td>
-                    {group.lastPostedAt
-                      ? new Date(group.lastPostedAt).toLocaleDateString()
-                      : 'Never'}
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-        {groups.filter(g => g.platform === syncPlatform).length === 0 && (
+
+      <div className="fgp-section" aria-labelledby="groups-heading">
+        <div className="fgp-section-header">
+          <h3 id="groups-heading">Groups ({filteredGroups.length})</h3>
+        </div>
+        {filteredGroups.length === 0 ? (
           <div className="fgp-empty-state">
-            <Users size={48} />
-            <p>
-              No{' '}
-              {syncPlatform === 'facebook'
-                ? 'Facebook'
-                : syncPlatform === 'whatsapp'
-                  ? 'WhatsApp'
-                  : 'Messenger'}{' '}
-              groups yet
-            </p>
-            <button className="fgp-btn fgp-btn-primary" onClick={handleSync} disabled={syncing}>
-              Sync{' '}
-              {syncPlatform === 'facebook'
-                ? 'Facebook'
-                : syncPlatform === 'whatsapp'
-                  ? 'WhatsApp'
-                  : 'Messenger'}{' '}
-              Groups
+            <Users size={48} aria-hidden="true" />
+            <p>No groups found</p>
+            <button className="fgp-btn fgp-btn-primary" onClick={() => onOpenGroupModal()}>
+              Add your first group
             </button>
+          </div>
+        ) : (
+          <div className="fgp-groups-table" role="region" aria-label="Groups table">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Platform</th>
+                  <th scope="col">URL</th>
+                  <th scope="col">Added</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredGroups.map(group => (
+                  <tr key={group.id}>
+                    <td className="fgp-group-name">{group.name}</td>
+                    <td>
+                      <span
+                        className="fgp-platform-badge"
+                        style={{
+                          background: PLATFORM_COLORS[group.platform] + '20',
+                          color: PLATFORM_COLORS[group.platform],
+                        }}
+                        aria-label={`Platform: ${PLATFORM_LABELS[group.platform] || group.platform}`}
+                      >
+                        {PLATFORM_ICONS[group.platform]}
+                        {PLATFORM_LABELS[group.platform] || group.platform}
+                      </span>
+                    </td>
+                    <td className="fgp-group-url" title={group.url}>
+                      {group.url ? new URL(group.url).hostname : '-'}
+                    </td>
+                    <td>{formatTime(group.addedAt)}</td>
+                    <td>
+                      <div className="fgp-action-buttons-sm">
+                        <button
+                          className="fgp-btn-icon"
+                          onClick={() => onOpenGroupModal(group)}
+                          aria-label={`Edit group ${group.name}`}
+                        >
+                          <Edit size={14} aria-hidden="true" />
+                        </button>
+                        <button
+                          className="fgp-btn-icon fgp-btn-icon-danger"
+                          onClick={() => onDeleteGroup(group.id)}
+                          aria-label={`Delete group ${group.name}`}
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -975,344 +838,1005 @@ function GroupsTab({
   );
 }
 
-interface TemplatesTabProps {
-  templates: Template[];
-  editingTemplate: Template | undefined;
-  setEditingTemplate: (template: Template | undefined) => void;
-  onSave: (template: Template) => void;
-  onDelete: (id: string) => void;
+function GroupModal({
+  group,
+  onSave,
+  onClose,
+}: {
+  group: Group;
+  onSave: (group: Group) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(group.name);
+  const [url, setUrl] = useState(group.url);
+  const [platform, setPlatform] = useState<Platform>(group.platform);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  const handleSave = async () => {
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) newErrors.name = 'Name is required';
+    if (url && !url.startsWith('http'))
+      newErrors.url = 'Valid URL required (must start with http:// or https://)';
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
+
+    setSaving(true);
+    const savedGroup: Group = {
+      ...group,
+      id: group.id || generateId('group'),
+      name: name.trim(),
+      url: url.trim(),
+      platform,
+      addedAt: group.addedAt || Date.now(),
+    };
+    await onSave(savedGroup);
+    setSaving(false);
+  };
+
+  // Focus management
+  useEffect(() => {
+    previousActiveElement.current = document.activeElement as HTMLElement;
+    modalRef.current?.focus();
+    // Trap focus
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        const focusableElements = modalRef.current?.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements && focusableElements.length > 0) {
+          const first = focusableElements[0] as HTMLElement;
+          const last = focusableElements[focusableElements.length - 1] as HTMLElement;
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousActiveElement.current?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fgp-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        ref={modalRef}
+        className="fgp-modal"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-modal-title"
+        tabIndex={-1}
+      >
+        <div className="fgp-modal-header">
+          <h3 id="group-modal-title">{group.id ? 'Edit Group' : 'Add Group'}</h3>
+          <button className="fgp-btn-icon" onClick={onClose} aria-label="Close modal">
+            <X size={20} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="fgp-modal-body">
+          <div className="fgp-form-field">
+            <label htmlFor="group-name">Name *</label>
+            <input
+              id="group-name"
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Group name"
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? 'group-name-error' : undefined}
+            />
+            {errors.name && (
+              <span id="group-name-error" className="fgp-form-error" role="alert">
+                {errors.name}
+              </span>
+            )}
+          </div>
+          <div className="fgp-form-field">
+            <label htmlFor="group-url">URL</label>
+            <input
+              id="group-url"
+              type="text"
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              placeholder="https://..."
+              aria-invalid={!!errors.url}
+              aria-describedby={errors.url ? 'group-url-error' : undefined}
+            />
+            {errors.url && (
+              <span id="group-url-error" className="fgp-form-error" role="alert">
+                {errors.url}
+              </span>
+            )}
+          </div>
+          <div className="fgp-form-field">
+            <label htmlFor="group-platform">Platform *</label>
+            <select
+              id="group-platform"
+              value={platform}
+              onChange={e => setPlatform(e.target.value as Platform)}
+              className="fgp-select"
+            >
+              <option value="facebook">Facebook</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="messenger">Messenger</option>
+            </select>
+          </div>
+        </div>
+        <div className="fgp-modal-footer">
+          <button className="fgp-btn fgp-btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="fgp-btn fgp-btn-primary"
+            onClick={handleSave}
+            disabled={saving}
+            aria-busy={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="fgp-spin" aria-hidden="true" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={16} aria-hidden="true" />
+                Save
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupListModal({
+  list,
+  groups,
+  onSave,
+  onClose,
+}: {
+  list: GroupList;
+  groups: Group[];
+  onSave: (list: GroupList) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(list.name);
+  const [color, setColor] = useState(list.color);
+  const [platform, setPlatform] = useState<Platform>(list.platform);
+  const [groupIds, setGroupIds] = useState<string[]>(list.groupIds);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  const platformGroups = groups.filter(g => g.platform === platform);
+
+  const handleSave = async () => {
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) newErrors.name = 'List name is required';
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
+
+    setSaving(true);
+    const savedList: GroupList = {
+      ...list,
+      id: list.id || generateId('list'),
+      name: name.trim(),
+      groupIds,
+      color,
+      platform,
+      createdAt: list.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+    await onSave(savedList);
+    setSaving(false);
+  };
+
+  // Focus management
+  useEffect(() => {
+    previousActiveElement.current = document.activeElement as HTMLElement;
+    modalRef.current?.focus();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        const focusableElements = modalRef.current?.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements && focusableElements.length > 0) {
+          const first = focusableElements[0] as HTMLElement;
+          const last = focusableElements[focusableElements.length - 1] as HTMLElement;
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousActiveElement.current?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fgp-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        ref={modalRef}
+        className="fgp-modal fgp-modal-lg"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="list-modal-title"
+        tabIndex={-1}
+      >
+        <div className="fgp-modal-header">
+          <h3 id="list-modal-title">
+            {list.id.startsWith('list_') && !list.name ? 'New Group List' : 'Edit Group List'}
+          </h3>
+          <button className="fgp-btn-icon" onClick={onClose} aria-label="Close modal">
+            <X size={20} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="fgp-modal-body">
+          <div className="fgp-form-row">
+            <div className="fgp-form-field">
+              <label htmlFor="list-name">List Name *</label>
+              <input
+                id="list-name"
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="My Group List"
+                aria-invalid={!!errors.name}
+                aria-describedby={errors.name ? 'list-name-error' : undefined}
+              />
+              {errors.name && (
+                <span id="list-name-error" className="fgp-form-error" role="alert">
+                  {errors.name}
+                </span>
+              )}
+            </div>
+            <div className="fgp-form-field">
+              <label htmlFor="list-color">Color</label>
+              <input
+                id="list-color"
+                type="color"
+                value={color}
+                onChange={e => setColor(e.target.value)}
+                aria-label="List color"
+              />
+            </div>
+          </div>
+          <div className="fgp-form-field">
+            <label htmlFor="list-platform">Platform</label>
+            <select
+              id="list-platform"
+              value={platform}
+              onChange={e => {
+                setPlatform(e.target.value as Platform);
+                setGroupIds([]);
+              }}
+              className="fgp-select"
+            >
+              <option value="facebook">Facebook</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="messenger">Messenger</option>
+            </select>
+          </div>
+          <div className="fgp-form-field">
+            <label>
+              Groups ({platformGroups.length} available, {groupIds.length} selected)
+            </label>
+            <div
+              className="fgp-group-multi-select"
+              role="group"
+              aria-label="Select groups for this list"
+            >
+              {platformGroups.map(group => (
+                <label key={group.id} className="fgp-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={groupIds.includes(group.id)}
+                    onChange={e =>
+                      setGroupIds(prev =>
+                        e.target.checked ? [...prev, group.id] : prev.filter(id => id !== group.id)
+                      )
+                    }
+                  />
+                  <span>{group.name}</span>
+                </label>
+              ))}
+              {platformGroups.length === 0 && (
+                <p className="fgp-muted">No groups for this platform. Sync groups first.</p>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="fgp-modal-footer">
+          <button className="fgp-btn fgp-btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="fgp-btn fgp-btn-primary"
+            onClick={handleSave}
+            disabled={saving}
+            aria-busy={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="fgp-spin" aria-hidden="true" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={16} aria-hidden="true" />
+                Save
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function TemplatesTab({
   templates,
-  editingTemplate,
-  setEditingTemplate,
-  onSave,
-  onDelete,
-}: TemplatesTabProps) {
-  const [formData, setFormData] = useState({
-    name: '',
-    caption: '',
-    firstComment: '',
-    mode: 'share_original' as 'share_original' | 'repost_content',
-  });
-
-  useEffect(() => {
-    if (editingTemplate) {
-      setFormData({
-        name: editingTemplate.name,
-        caption: editingTemplate.caption,
-        firstComment: editingTemplate.firstComment || '',
-        mode: editingTemplate.settings.mode || 'share_original',
-      });
-    } else {
-      setFormData({ name: '', caption: '', firstComment: '', mode: 'share_original' });
-    }
-  }, [editingTemplate]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const name = sanitizeTemplateName(formData.name);
-    if (!name.trim()) return;
-    const template: Template = {
-      id: editingTemplate?.id || `template_${Date.now()}`,
-      name,
-      caption: sanitizeCaption(formData.caption),
-      firstComment: sanitizeComment(formData.firstComment),
-      settings: { mode: formData.mode },
-      createdAt: editingTemplate?.createdAt || Date.now(),
-      updatedAt: Date.now(),
-    };
-    onSave(template);
-    setFormData({ name: '', caption: '', firstComment: '', mode: 'share_original' });
-  };
-
+  onDeleteTemplate,
+  onOpenTemplateModal,
+}: {
+  templates: Template[];
+  onDeleteTemplate: (id: string) => void;
+  onOpenTemplateModal: (template?: Template) => void;
+}) {
   return (
-    <div className="fgp-tab-panel">
-      <div className="fgp-panel-header">
-        <h2>Post Templates</h2>
-        <button
-          className="fgp-btn fgp-btn-primary"
-          onClick={() =>
-            setEditingTemplate({
-              id: `template_${Date.now()}`,
-              name: '',
-              caption: '',
-              firstComment: '',
-              settings: { mode: 'share_original' },
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            })
-          }
-        >
-          <Plus size={18} /> New Template
+    <div className="fgp-tab-content" role="region" aria-label="Templates">
+      <div className="fgp-section-header">
+        <h2>Templates</h2>
+        <button className="fgp-btn fgp-btn-primary" onClick={() => onOpenTemplateModal()}>
+          <Plus size={16} aria-hidden="true" /> New Template
         </button>
       </div>
 
-      {editingTemplate !== undefined && (
-        <form className="fgp-form" onSubmit={handleSubmit}>
-          <div className="fgp-form-row">
-            <label>Template Name</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={e =>
-                setFormData({ ...formData, name: sanitizeTemplateName(e.target.value) })
-              }
-              placeholder="My Template"
-              required
-            />
-          </div>
-          <div className="fgp-form-row">
-            <label>Share Mode</label>
-            <select
-              value={formData.mode}
-              onChange={e => setFormData({ ...formData, mode: e.target.value as ShareMode })}
-            >
-              <option value="share_original">Share the post (keeps author)</option>
-              <option value="repost_content">Post as me (new post)</option>
-            </select>
-          </div>
-          <div className="fgp-form-row">
-            <label>Caption</label>
-            <textarea
-              value={formData.caption}
-              onChange={e => setFormData({ ...formData, caption: sanitizeCaption(e.target.value) })}
-              rows={4}
-              placeholder="Your caption... Use {option1|option2} for Spintax"
-            />
-          </div>
-          <div className="fgp-form-row">
-            <label>First Comment (optional)</label>
-            <textarea
-              value={formData.firstComment}
-              onChange={e =>
-                setFormData({ ...formData, firstComment: sanitizeComment(e.target.value) })
-              }
-              rows={2}
-              placeholder="First comment to auto-post"
-            />
-          </div>
-          <div className="fgp-form-actions">
-            <button
-              type="button"
-              className="fgp-btn fgp-btn-secondary"
-              onClick={() => setEditingTemplate(undefined)}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="fgp-btn fgp-btn-primary">
-              <Save size={18} /> {editingTemplate ? 'Update' : 'Create'}
-            </button>
-          </div>
-        </form>
+      {templates.length === 0 ? (
+        <div className="fgp-empty-state">
+          <FileText size={48} aria-hidden="true" />
+          <p>No templates yet</p>
+          <button className="fgp-btn fgp-btn-primary" onClick={() => onOpenTemplateModal()}>
+            Create your first template
+          </button>
+        </div>
+      ) : (
+        <div className="fgp-template-grid" role="list" aria-label="Templates">
+          {templates.map(template => (
+            <div key={template.id} className="fgp-template-card" role="listitem">
+              <div className="fgp-template-header">
+                <h4>{template.name}</h4>
+                <div className="fgp-template-actions">
+                  <button
+                    className="fgp-btn-icon"
+                    onClick={() => onOpenTemplateModal(template)}
+                    aria-label={`Edit template ${template.name}`}
+                  >
+                    <Edit size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    className="fgp-btn-icon fgp-btn-icon-danger"
+                    onClick={() => onDeleteTemplate(template.id)}
+                    aria-label={`Delete template ${template.name}`}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+              <div className="fgp-template-preview">
+                <p>{template.caption || '<no caption>'}</p>
+                {template.firstComment && (
+                  <p
+                    className="fgp-first-comment"
+                    aria-label={`First comment: ${template.firstComment}`}
+                  >
+                    💬 {template.firstComment}
+                  </p>
+                )}
+              </div>
+              <div className="fgp-template-meta" aria-label="Template settings">
+                <span>
+                  {template.settings.mode === 'share_original' ? 'Share Original' : 'Repost as Me'}
+                </span>
+                <span>{template.settings.safetyLevel}</span>
+                <span>Delay: {Math.round(template.settings.delayBetweenGroups / 1000)}s</span>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
-
-      <div className="fgp-template-grid">
-        {templates.map(template => (
-          <div key={template.id} className="fgp-template-card">
-            <div className="fgp-template-header">
-              <h4>{template.name}</h4>
-              <span className="fgp-mode-badge">
-                {template.settings.mode === 'share_original' ? 'Share' : 'Repost'}
-              </span>
-            </div>
-            <p className="fgp-template-preview">{template.caption.slice(0, 100)}...</p>
-            <div className="fgp-template-actions">
-              <button
-                className="fgp-btn-icon"
-                onClick={() => setEditingTemplate(template)}
-                title="Edit"
-              >
-                <Edit size={16} />
-              </button>
-              <button className="fgp-btn-icon" onClick={() => onDelete(template.id)} title="Delete">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-        {templates.length === 0 && !editingTemplate && (
-          <div className="fgp-empty-state">
-            <FileText size={48} />
-            <p>No templates yet</p>
-            <button
-              className="fgp-btn fgp-btn-primary"
-              onClick={() => setEditingTemplate(undefined)}
-            >
-              Create your first template
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
-interface ImagesTabProps {
-  imageSets: ImageSet[];
-  editingImageSet: ImageSet | undefined;
-  setEditingImageSet: (imageSet: ImageSet | undefined) => void;
-  onSave: (imageSet: ImageSet) => void;
-  onDelete: (id: string) => void;
+function TemplateModal({
+  template,
+  onSave,
+  onClose,
+}: {
+  template: Template;
+  onSave: (template: Template) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(template.name);
+  const [caption, setCaption] = useState(template.caption);
+  const [firstComment, setFirstComment] = useState(template.firstComment || '');
+  const [mode, setMode] = useState<ShareSettings['mode']>(template.settings.mode);
+  const [useSpintax, setUseSpintax] = useState(template.settings.useSpintax);
+  const [delayBetweenGroups, setDelayBetweenGroups] = useState(
+    template.settings.delayBetweenGroups
+  );
+  const [safetyLevel, setSafetyLevel] = useState(template.settings.safetyLevel);
+  const [overnightPause, setOvernightPause] = useState(template.settings.overnightPause);
+  const [maxPostsPerDay, setMaxPostsPerDay] = useState(template.settings.maxPostsPerDay);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  const handleSave = async () => {
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) newErrors.name = 'Template name is required';
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
+
+    setSaving(true);
+    const savedTemplate: Template = {
+      ...template,
+      id: template.id || generateId('template'),
+      name: name.trim(),
+      caption: caption.trim(),
+      firstComment: firstComment.trim(),
+      settings: {
+        mode,
+        caption: caption.trim(),
+        firstComment: firstComment.trim(),
+        useSpintax,
+        delayBetweenGroups,
+        safetyLevel,
+        overnightPause,
+        overnightStart: template.settings.overnightStart || '22:00',
+        overnightEnd: template.settings.overnightEnd || '07:00',
+        maxPostsPerDay,
+      },
+      createdAt: template.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+    await onSave(savedTemplate);
+    setSaving(false);
+  };
+
+  // Focus management
+  useEffect(() => {
+    previousActiveElement.current = document.activeElement as HTMLElement;
+    modalRef.current?.focus();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        const focusableElements = modalRef.current?.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements && focusableElements.length > 0) {
+          const first = focusableElements[0] as HTMLElement;
+          const last = focusableElements[focusableElements.length - 1] as HTMLElement;
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousActiveElement.current?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fgp-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        ref={modalRef}
+        className="fgp-modal fgp-modal-lg"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="template-modal-title"
+        tabIndex={-1}
+      >
+        <div className="fgp-modal-header">
+          <h3 id="template-modal-title">
+            {template.id.startsWith('template_') && !template.name
+              ? 'New Template'
+              : 'Edit Template'}
+          </h3>
+          <button className="fgp-btn-icon" onClick={onClose} aria-label="Close modal">
+            <X size={20} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="fgp-modal-body">
+          <div className="fgp-form-field">
+            <label htmlFor="template-name">Template Name *</label>
+            <input
+              id="template-name"
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="My Template"
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? 'template-name-error' : undefined}
+            />
+            {errors.name && (
+              <span id="template-name-error" className="fgp-form-error" role="alert">
+                {errors.name}
+              </span>
+            )}
+          </div>
+          <div className="fgp-form-field">
+            <label htmlFor="template-caption">Caption</label>
+            <textarea
+              id="template-caption"
+              value={caption}
+              onChange={e => setCaption(e.target.value)}
+              placeholder="Post caption... Use {option1|option2} for spintax"
+              rows={4}
+            />
+            <label className="fgp-checkbox-label">
+              <input
+                type="checkbox"
+                checked={useSpintax}
+                onChange={e => setUseSpintax(e.target.checked)}
+              />
+              <span>Enable spintax ({'{option1 | option2}'})</span>
+            </label>
+          </div>
+          <div className="fgp-form-field">
+            <label htmlFor="template-first-comment">First Comment</label>
+            <textarea
+              id="template-first-comment"
+              value={firstComment}
+              onChange={e => setFirstComment(e.target.value)}
+              placeholder="First comment to post..."
+              rows={2}
+            />
+          </div>
+          <div className="fgp-form-row">
+            <div className="fgp-form-field">
+              <label htmlFor="template-mode">Mode</label>
+              <select
+                id="template-mode"
+                value={mode}
+                onChange={e => setMode(e.target.value as ShareSettings['mode'])}
+                className="fgp-select"
+              >
+                <option value="share_original">Share Original Post</option>
+                <option value="repost_content">Repost as My Content</option>
+              </select>
+            </div>
+            <div className="fgp-form-field">
+              <label htmlFor="template-safety">Safety Level</label>
+              <select
+                id="template-safety"
+                value={safetyLevel}
+                onChange={e => setSafetyLevel(e.target.value as ShareSettings['safetyLevel'])}
+                className="fgp-select"
+              >
+                <option value="fast">Fast (30-60s)</option>
+                <option value="balanced">Balanced (60-120s)</option>
+                <option value="safe">Safe (120-180s)</option>
+              </select>
+            </div>
+          </div>
+          <div className="fgp-form-row">
+            <div className="fgp-form-field">
+              <label htmlFor="template-delay">Delay Between Groups (ms)</label>
+              <input
+                id="template-delay"
+                type="number"
+                value={delayBetweenGroups}
+                onChange={e => setDelayBetweenGroups(parseInt(e.target.value) || 90000)}
+                min="5000"
+                max="3600000"
+                step="5000"
+              />
+            </div>
+            <div className="fgp-form-field">
+              <label htmlFor="template-max-posts">Max Posts/Day</label>
+              <input
+                id="template-max-posts"
+                type="number"
+                value={maxPostsPerDay}
+                onChange={e => setMaxPostsPerDay(parseInt(e.target.value) || 20)}
+                min="1"
+                max="500"
+              />
+            </div>
+          </div>
+          <div className="fgp-form-field">
+            <label className="fgp-checkbox-label">
+              <input
+                type="checkbox"
+                checked={overnightPause}
+                onChange={e => setOvernightPause(e.target.checked)}
+              />
+              <span>Pause overnight (22:00 - 07:00)</span>
+            </label>
+          </div>
+        </div>
+        <div className="fgp-modal-footer">
+          <button className="fgp-btn fgp-btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="fgp-btn fgp-btn-primary"
+            onClick={handleSave}
+            disabled={saving}
+            aria-busy={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="fgp-spin" aria-hidden="true" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={16} aria-hidden="true" />
+                Save
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ImagesTab({
   imageSets,
-  editingImageSet,
-  setEditingImageSet,
-  onSave,
-  onDelete,
-}: ImagesTabProps) {
-  const [formData, setFormData] = useState({ name: '', imageUrls: '' });
-
-  useEffect(() => {
-    if (editingImageSet) {
-      setFormData({ name: editingImageSet.name, imageUrls: editingImageSet.imageUrls.join('\n') });
-    } else {
-      setFormData({ name: '', imageUrls: '' });
-    }
-  }, [editingImageSet]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const name = sanitizeImageSetName(formData.name);
-    if (!name.trim()) return;
-    const urls = formData.imageUrls
-      .split('\n')
-      .map(u => u.trim())
-      .filter(Boolean);
-    const imageSet: ImageSet = {
-      id: editingImageSet?.id || `images_${Date.now()}`,
-      name,
-      imageUrls: urls,
-      createdAt: editingImageSet?.createdAt || Date.now(),
-    };
-    onSave(imageSet);
-    setFormData({ name: '', imageUrls: '' });
-  };
-
+  onDeleteImageSet,
+  onOpenImageSetModal,
+}: {
+  imageSets: ImageSet[];
+  onDeleteImageSet: (id: string) => void;
+  onOpenImageSetModal: (imageSet?: ImageSet) => void;
+}) {
   return (
-    <div className="fgp-tab-panel">
-      <div className="fgp-panel-header">
+    <div className="fgp-tab-content" role="region" aria-label="Image Sets">
+      <div className="fgp-section-header">
         <h2>Image Sets</h2>
-        <button
-          className="fgp-btn fgp-btn-primary"
-          onClick={() =>
-            setEditingImageSet({
-              id: `images_${Date.now()}`,
-              name: '',
-              imageUrls: [],
-              createdAt: Date.now(),
-            })
-          }
-        >
-          <Plus size={18} /> New Image Set
+        <button className="fgp-btn fgp-btn-primary" onClick={() => onOpenImageSetModal()}>
+          <Plus size={16} aria-hidden="true" /> New Image Set
         </button>
       </div>
 
-      {editingImageSet !== undefined && (
-        <form className="fgp-form" onSubmit={handleSubmit}>
-          <div className="fgp-form-row">
-            <label>Set Name</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={e =>
-                setFormData({ ...formData, name: sanitizeImageSetName(e.target.value) })
-              }
-              placeholder="My Images"
-              required
-            />
-          </div>
-          <div className="fgp-form-row">
-            <label>Image URLs (one per line)</label>
-            <textarea
-              value={formData.imageUrls}
-              onChange={e => setFormData({ ...formData, imageUrls: e.target.value })}
-              rows={6}
-              placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"
-            />
-          </div>
-          <div className="fgp-form-actions">
-            <button
-              type="button"
-              className="fgp-btn fgp-btn-secondary"
-              onClick={() => setEditingImageSet(undefined)}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="fgp-btn fgp-btn-primary">
-              <Save size={18} /> {editingImageSet ? 'Update' : 'Create'}
-            </button>
-          </div>
-        </form>
+      {imageSets.length === 0 ? (
+        <div className="fgp-empty-state">
+          <Image size={48} aria-hidden="true" />
+          <p>No image sets yet</p>
+          <button className="fgp-btn fgp-btn-primary" onClick={() => onOpenImageSetModal()}>
+            Create your first image set
+          </button>
+        </div>
+      ) : (
+        <div className="fgp-image-set-grid" role="list" aria-label="Image sets">
+          {imageSets.map(imageSet => (
+            <div key={imageSet.id} className="fgp-image-set-card" role="listitem">
+              <div className="fgp-image-set-header">
+                <h4>{imageSet.name}</h4>
+                <div className="fgp-image-set-actions">
+                  <button
+                    className="fgp-btn-icon"
+                    onClick={() => onOpenImageSetModal(imageSet)}
+                    aria-label={`Edit image set ${imageSet.name}`}
+                  >
+                    <Edit size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    className="fgp-btn-icon fgp-btn-icon-danger"
+                    onClick={() => onDeleteImageSet(imageSet.id)}
+                    aria-label={`Delete image set ${imageSet.name}`}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+              <div
+                className="fgp-image-set-preview"
+                role="img"
+                aria-label={`${imageSet.name} preview`}
+              >
+                {imageSet.imageUrls.slice(0, 4).map((url, i) => (
+                  <img key={i} src={url} alt={`${imageSet.name} ${i + 1}`} loading="lazy" />
+                ))}
+                {imageSet.imageUrls.length > 4 && (
+                  <div className="fgp-image-set-more" aria-hidden="true">
+                    +{imageSet.imageUrls.length - 4} more
+                  </div>
+                )}
+              </div>
+              <div className="fgp-image-set-meta">
+                {imageSet.imageUrls.length} image{imageSet.imageUrls.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
+    </div>
+  );
+}
 
-      <div className="fgp-image-grid">
-        {imageSets.map(set => (
-          <div key={set.id} className="fgp-image-card">
-            <div className="fgp-image-preview">
-              {set.imageUrls.slice(0, 4).map((url, i) => (
-                <img key={i} src={url} alt="" loading="lazy" />
+function ImageSetModal({
+  imageSet,
+  onSave,
+  onClose,
+}: {
+  imageSet: ImageSet;
+  onSave: (imageSet: ImageSet) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(imageSet.name);
+  const [imageUrls, setImageUrls] = useState<string[]>(imageSet.imageUrls);
+  const [newUrl, setNewUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  const addUrl = () => {
+    if (!newUrl.trim()) return;
+    try {
+      new URL(newUrl);
+      if (!imageUrls.includes(newUrl.trim())) {
+        setImageUrls([...imageUrls, newUrl.trim()].slice(0, 50));
+        setNewUrl('');
+        setErrors({});
+      }
+    } catch {
+      setErrors({ url: 'Invalid URL format' });
+    }
+  };
+
+  const removeUrl = (index: number) => {
+    setImageUrls(imageUrls.filter((_, i) => i !== index));
+  };
+
+  const handleSave = async () => {
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) newErrors.name = 'Image set name is required';
+    if (imageUrls.length === 0) newErrors.images = 'Add at least one image URL';
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
+
+    setSaving(true);
+    const savedImageSet: ImageSet = {
+      ...imageSet,
+      id: imageSet.id || generateId('images'),
+      name: name.trim(),
+      imageUrls,
+      createdAt: imageSet.createdAt || Date.now(),
+    };
+    await onSave(savedImageSet);
+    setSaving(false);
+  };
+
+  // Focus management
+  useEffect(() => {
+    previousActiveElement.current = document.activeElement as HTMLElement;
+    modalRef.current?.focus();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        const focusableElements = modalRef.current?.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements && focusableElements.length > 0) {
+          const first = focusableElements[0] as HTMLElement;
+          const last = focusableElements[focusableElements.length - 1] as HTMLElement;
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousActiveElement.current?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fgp-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        ref={modalRef}
+        className="fgp-modal fgp-modal-lg"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="imageset-modal-title"
+        tabIndex={-1}
+      >
+        <div className="fgp-modal-header">
+          <h3 id="imageset-modal-title">
+            {imageSet.id.startsWith('images_') && !imageSet.name
+              ? 'New Image Set'
+              : 'Edit Image Set'}
+          </h3>
+          <button className="fgp-btn-icon" onClick={onClose} aria-label="Close modal">
+            <X size={20} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="fgp-modal-body">
+          <div className="fgp-form-field">
+            <label htmlFor="imageset-name">Image Set Name *</label>
+            <input
+              id="imageset-name"
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="My Images"
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? 'imageset-name-error' : undefined}
+            />
+            {errors.name && (
+              <span id="imageset-name-error" className="fgp-form-error" role="alert">
+                {errors.name}
+              </span>
+            )}
+          </div>
+          <div className="fgp-form-field">
+            <label htmlFor="imageset-url">Image URLs (max 50)</label>
+            <div className="fgp-url-input-row">
+              <input
+                id="imageset-url"
+                type="text"
+                value={newUrl}
+                onChange={e => setNewUrl(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                onKeyDown={e => e.key === 'Enter' && addUrl()}
+                aria-invalid={!!errors.url}
+                aria-describedby={errors.url ? 'imageset-url-error' : undefined}
+              />
+              <button
+                className="fgp-btn fgp-btn-sm fgp-btn-primary"
+                onClick={addUrl}
+                aria-label="Add image URL"
+              >
+                <Plus size={16} aria-hidden="true" /> Add
+              </button>
+            </div>
+            {errors.url && (
+              <span id="imageset-url-error" className="fgp-form-error" role="alert">
+                {errors.url}
+              </span>
+            )}
+            {errors.images && (
+              <span id="imageset-images-error" className="fgp-form-error" role="alert">
+                {errors.images}
+              </span>
+            )}
+            <div className="fgp-image-url-list" role="list" aria-label="Added images">
+              {imageUrls.map((url, i) => (
+                <div key={i} className="fgp-image-url-item" role="listitem">
+                  <img src={url} alt={`${imageSet.name || 'Image'} ${i + 1}`} loading="lazy" />
+                  <span className="fgp-image-url-text" title={url}>
+                    {url}
+                  </span>
+                  <button
+                    className="fgp-btn-icon fgp-btn-icon-danger"
+                    onClick={() => removeUrl(i)}
+                    aria-label={`Remove image ${i + 1}`}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </div>
               ))}
-              {set.imageUrls.length > 4 && (
-                <div className="fgp-image-more">+{set.imageUrls.length - 4}</div>
+              {imageUrls.length === 0 && (
+                <p className="fgp-muted" role="status">
+                  No images added yet
+                </p>
               )}
             </div>
-            <div className="fgp-image-info">
-              <h4>{set.name}</h4>
-              <span>{set.imageUrls.length} images</span>
-            </div>
-            <div className="fgp-image-actions">
-              <button className="fgp-btn-icon" onClick={() => setEditingImageSet(set)} title="Edit">
-                <Edit size={16} />
-              </button>
-              <button className="fgp-btn-icon" onClick={() => onDelete(set.id)} title="Delete">
-                <Trash2 size={16} />
-              </button>
-            </div>
           </div>
-        ))}
-        {imageSets.length === 0 && !editingImageSet && (
-          <div className="fgp-empty-state">
-            <Image size={48} />
-            <p>No image sets yet</p>
-            <button
-              className="fgp-btn fgp-btn-primary"
-              onClick={() => setEditingImageSet(undefined)}
-            >
-              Create your first image set
-            </button>
-          </div>
-        )}
+        </div>
+        <div className="fgp-modal-footer">
+          <button className="fgp-btn fgp-btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="fgp-btn fgp-btn-primary"
+            onClick={handleSave}
+            disabled={saving}
+            aria-busy={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="fgp-spin" aria-hidden="true" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={16} aria-hidden="true" />
+                Save
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-interface SettingsTabProps {
-  settings: UserSettings;
-  setSettings: (settings: UserSettings) => void;
-}
-
-function SettingsTab({ settings, setSettings }: SettingsTabProps) {
-  const handleChange = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
-    setSettings({ ...settings, [key]: value });
-    chrome.runtime.sendMessage({ type: 'UPDATE_USER_SETTINGS', settings: { [key]: value } });
-  };
+function SettingsTab({
+  userSettings,
+  onExportData,
+  onImportData,
+  onClearAllData,
+}: {
+  userSettings: UserSettings;
+  onExportData: () => void;
+  onImportData: () => void;
+  onClearAllData: () => void;
+}) {
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(userSettings.theme);
 
   return (
-    <div className="fgp-tab-panel">
-      <div className="fgp-panel-header">
-        <h2>Settings</h2>
-      </div>
-
-      <div className="fgp-settings-section">
-        <h3>Appearance</h3>
+    <div className="fgp-tab-content" role="region" aria-label="Settings">
+      <div className="fgp-section" aria-labelledby="appearance-heading">
+        <h3 id="appearance-heading">Appearance</h3>
         <div className="fgp-setting-row">
-          <label>Theme</label>
-          <select value={settings.theme} onChange={e => handleChange('theme', e.target.value)}>
+          <label htmlFor="theme-select">Theme</label>
+          <select
+            id="theme-select"
+            value={theme}
+            onChange={e => setTheme(e.target.value as 'system' | 'light' | 'dark')}
+            className="fgp-select"
+          >
             <option value="system">System</option>
             <option value="light">Light</option>
             <option value="dark">Dark</option>
@@ -1320,91 +1844,40 @@ function SettingsTab({ settings, setSettings }: SettingsTabProps) {
         </div>
       </div>
 
-      <div className="fgp-settings-section">
-        <h3>Share Button on Facebook</h3>
-        <div className="fgp-setting-row">
-          <label>Show "Share to Groups" button</label>
-          <input
-            type="checkbox"
-            checked={settings.showShareButton}
-            onChange={e => handleChange('showShareButton', e.target.checked)}
-          />
+      <div className="fgp-section" aria-labelledby="data-heading">
+        <h3 id="data-heading">Data Management</h3>
+        <div className="fgp-action-buttons">
+          <button className="fgp-btn fgp-btn-secondary" onClick={onExportData}>
+            <Download size={18} aria-hidden="true" /> Export Data
+          </button>
+          <button className="fgp-btn fgp-btn-secondary" onClick={onImportData}>
+            <Upload size={18} aria-hidden="true" /> Import Data
+          </button>
+          <button className="fgp-btn fgp-btn-danger" onClick={onClearAllData}>
+            <Trash size={18} aria-hidden="true" /> Clear All Data
+          </button>
         </div>
-        <div className="fgp-setting-row">
-          <label>Button Position</label>
-          <select
-            value={settings.shareButtonPosition}
-            onChange={e => handleChange('shareButtonPosition', e.target.value)}
+      </div>
+
+      <div className="fgp-section" aria-labelledby="about-heading">
+        <h3 id="about-heading">About</h3>
+        <div className="fgp-about">
+          <p>
+            <strong>Free Group Poster</strong> v1.0.0
+          </p>
+          <p>
+            Free, open-source Chrome extension for sharing posts to multiple Facebook, WhatsApp, and
+            Messenger groups.
+          </p>
+          <p>Built with ❤️ for the community. No tracking, no ads, fully local.</p>
+          <a
+            href="https://github.com/free-group-poster/free-group-poster"
+            target="_blank"
+            rel="noopener"
           >
-            <option value="after_share">After Facebook's Share</option>
-            <option value="before_share">Before Facebook's Share</option>
-            <option value="floating">Floating button</option>
-          </select>
+            View on GitHub
+          </a>
         </div>
-        <div className="fgp-setting-row">
-          <label>Auto-detect groups on Facebook</label>
-          <input
-            type="checkbox"
-            checked={settings.autoDetectGroups}
-            onChange={e => handleChange('autoDetectGroups', e.target.checked)}
-          />
-        </div>
-        <div className="fgp-setting-row">
-          <label>Confirm before sharing</label>
-          <input
-            type="checkbox"
-            checked={settings.confirmBeforeShare}
-            onChange={e => handleChange('confirmBeforeShare', e.target.checked)}
-          />
-        </div>
-      </div>
-
-      <div className="fgp-settings-section">
-        <h3>Notifications</h3>
-        <div className="fgp-setting-row">
-          <label>Sound notifications</label>
-          <input
-            type="checkbox"
-            checked={settings.soundNotifications}
-            onChange={e => handleChange('soundNotifications', e.target.checked)}
-          />
-        </div>
-        <div className="fgp-setting-row">
-          <label>Desktop notifications</label>
-          <input
-            type="checkbox"
-            checked={settings.desktopNotifications}
-            onChange={e => handleChange('desktopNotifications', e.target.checked)}
-          />
-        </div>
-      </div>
-
-      <div className="fgp-settings-section">
-        <h3>Privacy</h3>
-        <div className="fgp-setting-row">
-          <label>Anonymous usage analytics</label>
-          <input
-            type="checkbox"
-            checked={settings.analyticsOptIn}
-            onChange={e => handleChange('analyticsOptIn', e.target.checked)}
-          />
-        </div>
-        <p className="fgp-hint">All data stays on your device. No tracking, no external servers.</p>
-      </div>
-
-      <div className="fgp-settings-section">
-        <h3>Danger Zone</h3>
-        <button
-          className="fgp-btn fgp-btn-danger"
-          onClick={() => {
-            if (confirm('Delete ALL data? This cannot be undone.')) {
-              chrome.runtime.sendMessage({ type: 'CLEAR_ALL_DATA' });
-              alert('All data cleared!');
-            }
-          }}
-        >
-          <Trash2 size={18} /> Clear All Data
-        </button>
       </div>
     </div>
   );

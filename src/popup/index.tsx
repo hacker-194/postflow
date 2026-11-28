@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Users,
@@ -13,6 +13,7 @@ import {
   Download,
   Upload,
   Calendar,
+  X,
 } from 'lucide-react';
 import type { GroupList, ScheduledShare, ShareResult, UserSettings } from '../shared/types';
 
@@ -83,42 +84,67 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
       } catch (error) {
         alert(`❌ ${error}`);
       }
-    }, 3000);
+    }, 8000);
   };
 
   return (
-    <div className="fgp-tab-content">
-      <div className="fgp-stats-grid">
-        <div className="fgp-stat-card">
-          <div className="fgp-stat-icon" style={{ background: '#e7f3ff', color: '#1877f2' }}>
-            <Users size={24} />
+    <div
+      className="fgp-tab-content"
+      role="tabpanel"
+      id="panel-dashboard"
+      aria-labelledby="tab-dashboard"
+      tabIndex={0}
+      ref={el => {
+        if (el) (window as Window & { __dashboardRef?: HTMLElement }).__dashboardRef = el;
+      }}
+    >
+      <div className="fgp-stats-grid" role="list" aria-label="Statistics">
+        <div className="fgp-stat-card" role="listitem">
+          <div
+            className="fgp-stat-icon"
+            style={{ background: '#e7f3ff', color: '#1877f2' }}
+            aria-hidden="true"
+          >
+            <Users size={24} aria-hidden="true" />
           </div>
           <div className="fgp-stat-info">
             <div className="fgp-stat-value">{state.groupLists.length}</div>
             <div className="fgp-stat-label">Group Lists</div>
           </div>
         </div>
-        <div className="fgp-stat-card">
-          <div className="fgp-stat-icon" style={{ background: '#fff3e0', color: '#f77f00' }}>
-            <Send size={24} />
+        <div className="fgp-stat-card" role="listitem">
+          <div
+            className="fgp-stat-icon"
+            style={{ background: '#fff3e0', color: '#f77f00' }}
+            aria-hidden="true"
+          >
+            <Send size={24} aria-hidden="true" />
           </div>
           <div className="fgp-stat-info">
             <div className="fgp-stat-value">{state.dailyPosts}/200</div>
             <div className="fgp-stat-label">Posts Today</div>
           </div>
         </div>
-        <div className="fgp-stat-card">
-          <div className="fgp-stat-icon" style={{ background: '#e8f5e9', color: '#42b72a' }}>
-            <CheckCircle size={24} />
+        <div className="fgp-stat-card" role="listitem">
+          <div
+            className="fgp-stat-icon"
+            style={{ background: '#e8f5e9', color: '#42b72a' }}
+            aria-hidden="true"
+          >
+            <CheckCircle size={24} aria-hidden="true" />
           </div>
           <div className="fgp-stat-info">
             <div className="fgp-stat-value">{completedToday}</div>
             <div className="fgp-stat-label">Completed Today</div>
           </div>
         </div>
-        <div className="fgp-stat-card">
-          <div className="fgp-stat-icon" style={{ background: '#fce4ec', color: '#e63946' }}>
-            <Clock size={24} />
+        <div className="fgp-stat-card" role="listitem">
+          <div
+            className="fgp-stat-icon"
+            style={{ background: '#fce4ec', color: '#e63946' }}
+            aria-hidden="true"
+          >
+            <Clock size={24} aria-hidden="true" />
           </div>
           <div className="fgp-stat-info">
             <div className="fgp-stat-value">{pendingCount + runningCount}</div>
@@ -131,21 +157,21 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
         <div className="fgp-section-header">
           <h3>Platforms</h3>
         </div>
-        <div className="fgp-platform-stats">
-          <div className="fgp-platform-stat" style={{ borderColor: '#1877f2' }}>
-            <div className="fgp-platform-icon" style={{ background: '#1877f2' }}>
+        <div className="fgp-platform-stats" role="list" aria-label="Platform lists">
+          <div className="fgp-platform-stat" style={{ borderColor: '#1877f2' }} role="listitem">
+            <div className="fgp-platform-icon" style={{ background: '#1877f2' }} aria-hidden="true">
               FB
             </div>
             <div>{fbLists} lists</div>
           </div>
-          <div className="fgp-platform-stat" style={{ borderColor: '#25d366' }}>
-            <div className="fgp-platform-icon" style={{ background: '#25d366' }}>
+          <div className="fgp-platform-stat" style={{ borderColor: '#25d366' }} role="listitem">
+            <div className="fgp-platform-icon" style={{ background: '#25d366' }} aria-hidden="true">
               WA
             </div>
             <div>{waLists} lists</div>
           </div>
-          <div className="fgp-platform-stat" style={{ borderColor: '#0084ff' }}>
-            <div className="fgp-platform-icon" style={{ background: '#0084ff' }}>
+          <div className="fgp-platform-stat" style={{ borderColor: '#0084ff' }} role="listitem">
+            <div className="fgp-platform-icon" style={{ background: '#0084ff' }} aria-hidden="true">
               MS
             </div>
             <div>{msLists} lists</div>
@@ -162,19 +188,19 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
             className="fgp-btn fgp-btn-secondary"
             onClick={() => chrome.runtime.openOptionsPage()}
           >
-            <Settings size={18} /> Manage Lists
+            <Settings size={18} aria-hidden="true" /> Manage Lists
           </button>
           <button
             className="fgp-btn fgp-btn-primary"
             onClick={() => openAndSync('https://web.whatsapp.com', 'SYNC_WHATSAPP_GROUPS')}
           >
-            <Users size={18} /> Sync WhatsApp
+            <Users size={18} aria-hidden="true" /> Sync WhatsApp
           </button>
           <button
             className="fgp-btn fgp-btn-primary"
             onClick={() => openAndSync('https://messenger.com', 'SYNC_MESSENGER_GROUPS')}
           >
-            <Users size={18} /> Sync Messenger
+            <Users size={18} aria-hidden="true" /> Sync Messenger
           </button>
         </div>
       </div>
@@ -188,19 +214,19 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
             className="fgp-btn fgp-btn-secondary"
             onClick={() => chrome.tabs.create({ url: 'https://facebook.com' })}
           >
-            <Send size={18} /> Open Facebook
+            <Send size={18} aria-hidden="true" /> Open Facebook
           </button>
           <button
             className="fgp-btn fgp-btn-secondary"
             onClick={() => chrome.tabs.create({ url: 'https://web.whatsapp.com' })}
           >
-            <Send size={18} /> Open WhatsApp
+            <Send size={18} aria-hidden="true" /> Open WhatsApp
           </button>
           <button
             className="fgp-btn fgp-btn-secondary"
             onClick={() => chrome.tabs.create({ url: 'https://messenger.com' })}
           >
-            <Send size={18} /> Open Messenger
+            <Send size={18} aria-hidden="true" /> Open Messenger
           </button>
         </div>
       </div>
@@ -210,11 +236,16 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
           <div className="fgp-section-header">
             <h3>Currently Running</h3>
           </div>
-          <div className="fgp-running-list">
+          <div className="fgp-running-list" role="list" aria-label="Running shares">
             {scheduledShares
               .filter(s => s && s.status === 'running')
               .map(share => (
-                <div key={share.id} className="fgp-running-item">
+                <div
+                  key={share.id}
+                  className="fgp-running-item"
+                  role="listitem"
+                  aria-label={`Sharing to groups: ${share.progress?.completedGroups || 0} of ${share.progress?.totalGroups || 0} completed`}
+                >
                   <div className="fgp-running-info">
                     <div className="fgp-running-title">Sharing to groups...</div>
                     <div className="fgp-running-meta">
@@ -222,7 +253,20 @@ function Dashboard({ state, refresh }: { state: PopupState; refresh: () => void 
                       groups
                     </div>
                   </div>
-                  <div className="fgp-progress-bar">
+                  <div
+                    className="fgp-progress-bar"
+                    role="progressbar"
+                    aria-valuenow={
+                      share.progress?.totalGroups
+                        ? Math.round(
+                            (share.progress.completedGroups / share.progress.totalGroups) * 100
+                          )
+                        : 0
+                    }
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Share progress"
+                  >
                     <div
                       className="fgp-progress-fill"
                       style={{
@@ -254,11 +298,21 @@ function ListsTab({ state }: { state: PopupState }) {
   };
 
   return (
-    <div className="fgp-tab-content">
+    <div
+      className="fgp-tab-content"
+      role="tabpanel"
+      id="panel-lists"
+      aria-labelledby="tab-lists"
+      tabIndex={0}
+    >
       <div className="fgp-section-header">
         <h3>Group Lists</h3>
         <div className="fgp-filter-row">
+          <label htmlFor="platform-filter" className="fgp-sr-only">
+            Filter by platform
+          </label>
           <select
+            id="platform-filter"
             value={filterPlatform}
             onChange={e => setFilterPlatform(e.target.value as GroupList['platform'] | 'all')}
             className="fgp-select fgp-select-sm"
@@ -272,13 +326,13 @@ function ListsTab({ state }: { state: PopupState }) {
             className="fgp-btn fgp-btn-sm fgp-btn-primary"
             onClick={() => chrome.runtime.openOptionsPage()}
           >
-            <Plus size={16} /> New List
+            <Plus size={16} aria-hidden="true" /> New List
           </button>
         </div>
       </div>
       {filteredLists.length === 0 ? (
         <div className="fgp-empty-state">
-          <Users size={48} />
+          <Users size={48} aria-hidden="true" />
           <p>
             {filterPlatform === 'all' ? 'No group lists yet' : `No ${filterPlatform} lists yet`}
           </p>
@@ -290,9 +344,14 @@ function ListsTab({ state }: { state: PopupState }) {
           </button>
         </div>
       ) : (
-        <div className="fgp-list-grid">
+        <div className="fgp-list-grid" role="list" aria-label="Group lists">
           {filteredLists.map(list => (
-            <div key={list.id} className="fgp-list-card" style={{ borderColor: list.color }}>
+            <div
+              key={list.id}
+              className="fgp-list-card"
+              style={{ borderColor: list.color }}
+              role="listitem"
+            >
               <div className="fgp-list-header" style={{ background: list.color }}>
                 <span>{list.name}</span>
                 <span className="fgp-list-count">{list.groupIds.length} groups</span>
@@ -308,14 +367,18 @@ function ListsTab({ state }: { state: PopupState }) {
                     : 'Messenger'}
               </div>
               <div className="fgp-list-actions">
-                <button className="fgp-btn-icon" title="Share to this list">
-                  <Send size={16} />
+                <button
+                  className="fgp-btn-icon"
+                  aria-label={`Share to ${list.name}`}
+                  title="Share to this list"
+                >
+                  <Send size={16} aria-hidden="true" />
                 </button>
-                <button className="fgp-btn-icon" title="Edit">
-                  <Edit size={16} />
+                <button className="fgp-btn-icon" aria-label={`Edit ${list.name}`} title="Edit">
+                  <Edit size={16} aria-hidden="true" />
                 </button>
-                <button className="fgp-btn-icon" title="Delete">
-                  <Trash2 size={16} />
+                <button className="fgp-btn-icon" aria-label={`Delete ${list.name}`} title="Delete">
+                  <Trash2 size={16} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -333,26 +396,50 @@ function ScheduledTab({ state }: { state: PopupState }) {
   const running = scheduledShares.filter(s => s.status === 'running');
 
   return (
-    <div className="fgp-tab-content">
+    <div
+      className="fgp-tab-content"
+      role="tabpanel"
+      id="panel-scheduled"
+      aria-labelledby="tab-scheduled"
+      tabIndex={0}
+    >
       <div className="fgp-section-header">
         <h3>Scheduled Shares</h3>
       </div>
       {pending.length === 0 && running.length === 0 ? (
         <div className="fgp-empty-state">
-          <Clock size={48} />
+          <Clock size={48} aria-hidden="true" />
           <p>No scheduled shares</p>
         </div>
       ) : (
-        <div className="fgp-scheduled-list">
+        <div className="fgp-scheduled-list" role="list" aria-label="Scheduled shares">
           {running.map(share => (
-            <div key={share.id} className="fgp-scheduled-item running">
+            <div
+              key={share.id}
+              className="fgp-scheduled-item running"
+              role="listitem"
+              aria-label={`Running: ${share.postPreview.authorName}, ${share.progress?.completedGroups || 0} of ${share.progress?.totalGroups || 0} groups completed`}
+            >
               <div className="fgp-scheduled-info">
                 <div className="fgp-scheduled-title">Running: {share.postPreview.authorName}</div>
                 <div className="fgp-scheduled-meta">
                   {share.progress?.completedGroups || 0} / {share.progress?.totalGroups || 0} groups
                 </div>
               </div>
-              <div className="fgp-progress-bar">
+              <div
+                className="fgp-progress-bar"
+                role="progressbar"
+                aria-valuenow={
+                  share.progress?.totalGroups
+                    ? Math.round(
+                        (share.progress.completedGroups / share.progress.totalGroups) * 100
+                      )
+                    : 0
+                }
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Share progress"
+              >
                 <div
                   className="fgp-progress-fill"
                   style={{
@@ -363,16 +450,25 @@ function ScheduledTab({ state }: { state: PopupState }) {
             </div>
           ))}
           {pending.map(share => (
-            <div key={share.id} className="fgp-scheduled-item pending">
+            <div
+              key={share.id}
+              className="fgp-scheduled-item pending"
+              role="listitem"
+              aria-label={`Pending: ${share.postPreview.authorName}, scheduled for ${formatTime(share.scheduledAt)}`}
+            >
               <div className="fgp-scheduled-info">
                 <div className="fgp-scheduled-title">{share.postPreview.authorName}</div>
                 <div className="fgp-scheduled-meta">
-                  <Calendar size={14} /> {formatTime(share.scheduledAt)}
+                  <Calendar size={14} aria-hidden="true" /> {formatTime(share.scheduledAt)}
                 </div>
               </div>
               <div className="fgp-scheduled-actions">
-                <button className="fgp-btn-icon" title="Cancel">
-                  ✕
+                <button
+                  className="fgp-btn-icon"
+                  aria-label={`Cancel scheduled share for ${share.postPreview.authorName}`}
+                  title="Cancel"
+                >
+                  <X size={16} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -388,20 +484,31 @@ function HistoryTab({ state }: { state: PopupState }) {
   const failed = (state.shareHistory || []).filter(s => s.status === 'failed').slice(0, 10);
 
   return (
-    <div className="fgp-tab-content">
+    <div
+      className="fgp-tab-content"
+      role="tabpanel"
+      id="panel-history"
+      aria-labelledby="tab-history"
+      tabIndex={0}
+    >
       <div className="fgp-section-header">
         <h3>Recent History</h3>
       </div>
       {completed.length === 0 && failed.length === 0 ? (
         <div className="fgp-empty-state">
-          <CheckCircle size={48} />
+          <CheckCircle size={48} aria-hidden="true" />
           <p>No sharing history yet</p>
         </div>
       ) : (
-        <div className="fgp-history-list">
+        <div className="fgp-history-list" role="list" aria-label="Share history">
           {completed.map(share => (
-            <div key={share.id} className="fgp-history-item success">
-              <div className="fgp-history-icon success">
+            <div
+              key={share.id}
+              className="fgp-history-item success"
+              role="listitem"
+              aria-label={`${share.settings.mode === 'share_original' ? 'Shared' : 'Posted as me'} to ${share.progress?.successfulGroups || 0} groups ${formatRelativeTime(share.completedAt || share.startedAt)}`}
+            >
+              <div className="fgp-history-icon success" aria-hidden="true">
                 <CheckCircle size={20} />
               </div>
               <div className="fgp-history-info">
@@ -416,8 +523,13 @@ function HistoryTab({ state }: { state: PopupState }) {
             </div>
           ))}
           {failed.map(share => (
-            <div key={share.id} className="fgp-history-item failed">
-              <div className="fgp-history-icon failed">
+            <div
+              key={share.id}
+              className="fgp-history-item failed"
+              role="listitem"
+              aria-label={`Failed to share to ${share.progress?.failedGroups || 0} groups ${formatRelativeTime(share.completedAt || share.startedAt)}`}
+            >
+              <div className="fgp-history-icon failed" aria-hidden="true">
                 <AlertCircle size={20} />
               </div>
               <div className="fgp-history-info">
@@ -439,12 +551,19 @@ function SettingsTab({ state }: { state: PopupState }) {
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(state.userSettings.theme);
 
   return (
-    <div className="fgp-tab-content">
+    <div
+      className="fgp-tab-content"
+      role="tabpanel"
+      id="panel-settings"
+      aria-labelledby="tab-settings"
+      tabIndex={0}
+    >
       <div className="fgp-section">
         <h3>Appearance</h3>
         <div className="fgp-setting-row">
-          <label>Theme</label>
+          <label htmlFor="theme-select">Theme</label>
           <select
+            id="theme-select"
             value={theme}
             onChange={e => setTheme(e.target.value as 'system' | 'light' | 'dark')}
             className="fgp-select"
@@ -460,13 +579,13 @@ function SettingsTab({ state }: { state: PopupState }) {
         <h3>Data Management</h3>
         <div className="fgp-action-buttons">
           <button className="fgp-btn fgp-btn-secondary" onClick={exportData}>
-            <Download size={18} /> Export Data
+            <Download size={18} aria-hidden="true" /> Export Data
           </button>
           <button className="fgp-btn fgp-btn-secondary" onClick={importData}>
-            <Upload size={18} /> Import Data
+            <Upload size={18} aria-hidden="true" /> Import Data
           </button>
           <button className="fgp-btn fgp-btn-danger" onClick={clearAllData}>
-            <Trash2 size={18} /> Clear All Data
+            <Trash2 size={18} aria-hidden="true" /> Clear All Data
           </button>
         </div>
       </div>
@@ -482,7 +601,7 @@ function SettingsTab({ state }: { state: PopupState }) {
           <a
             href="https://github.com/free-group-poster/free-group-poster"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
           >
             View on GitHub
           </a>
@@ -535,18 +654,22 @@ function TabBar({
   setActiveTab: (tab: PopupState['activeTab']) => void;
 }) {
   const tabs: Array<{ id: PopupState['activeTab']; label: string; icon: React.ReactNode }> = [
-    { id: 'dashboard', label: 'Dashboard', icon: <Users size={18} /> },
-    { id: 'lists', label: 'Lists', icon: <Send size={18} /> },
-    { id: 'scheduled', label: 'Scheduled', icon: <Clock size={18} /> },
-    { id: 'history', label: 'History', icon: <CheckCircle size={18} /> },
-    { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
+    { id: 'dashboard', label: 'Dashboard', icon: <Users size={18} aria-hidden="true" /> },
+    { id: 'lists', label: 'Lists', icon: <Send size={18} aria-hidden="true" /> },
+    { id: 'scheduled', label: 'Scheduled', icon: <Clock size={18} aria-hidden="true" /> },
+    { id: 'history', label: 'History', icon: <CheckCircle size={18} aria-hidden="true" /> },
+    { id: 'settings', label: 'Settings', icon: <Settings size={18} aria-hidden="true" /> },
   ];
 
   return (
-    <div className="fgp-tab-bar">
+    <div className="fgp-tab-bar" role="tablist" aria-label="Main navigation">
       {tabs.map(tab => (
         <button
           key={tab.id}
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          aria-controls={`panel-${tab.id}`}
+          id={`tab-${tab.id}`}
           className={`fgp-tab ${activeTab === tab.id ? 'active' : ''}`}
           onClick={() => setActiveTab(tab.id)}
         >
@@ -583,10 +706,34 @@ function App() {
     setState(s => ({ ...s, activeTab: tab }));
   };
 
-  const refresh = async () => {
+  // Focus management for tab switching
+  const tabPanelRefs = useRef<Record<string, HTMLDivElement | null>>({
+    dashboard: null,
+    lists: null,
+    scheduled: null,
+    history: null,
+    settings: null,
+  });
+
+  useEffect(() => {
+    const panel = tabPanelRefs.current[state.activeTab];
+    if (panel) {
+      panel.focus();
+    }
+  }, [state.activeTab]);
+
+  function unwrap<T>(res: { success: boolean; data?: T; error?: string }): T | undefined {
+    if (!res?.success) {
+      console.error('Message failed:', res?.error);
+      return undefined;
+    }
+    return res.data;
+  }
+
+  const refresh = useCallback(async () => {
     setState(s => ({ ...s, loading: true }));
     try {
-      const [groupLists, scheduledShares, shareHistory, userSettings, dailyPosts] =
+      const [groupListsRes, scheduledSharesRes, shareHistoryRes, userSettingsRes, dailyPostsRes] =
         await Promise.all([
           chrome.runtime.sendMessage({ type: 'GET_GROUP_LISTS' }),
           chrome.runtime.sendMessage({ type: 'GET_ALL_SCHEDULED' }),
@@ -594,30 +741,33 @@ function App() {
           chrome.runtime.sendMessage({ type: 'GET_USER_SETTINGS' }),
           chrome.runtime.sendMessage({ type: 'GET_DAILY_POSTS' }),
         ]);
+
+      const groupLists = unwrap(groupListsRes) || [];
+      const scheduledShares = unwrap(scheduledSharesRes) || [];
+      const shareHistory = unwrap(shareHistoryRes) || [];
+      const userSettings = unwrap(userSettingsRes);
+      const dailyPosts = unwrap(dailyPostsRes) ?? 0;
+
       setState(s => ({
         ...s,
-        groupLists: Array.isArray(groupLists) ? groupLists : Object.values(groupLists || {}),
-        scheduledShares: isScheduledShareArray(scheduledShares)
-          ? scheduledShares
-          : Object.values(scheduledShares || {}),
-        shareHistory: Array.isArray(shareHistory)
-          ? shareHistory
-          : Object.values(shareHistory || {}),
+        groupLists,
+        scheduledShares,
+        shareHistory,
         userSettings: userSettings || s.userSettings,
-        dailyPosts: dailyPosts || 0,
+        dailyPosts,
         loading: false,
       }));
     } catch (error) {
       console.error('Failed to load data:', error);
       setState(s => ({ ...s, loading: false }));
     }
-  };
+  }, []);
 
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refresh]);
 
   const renderTab = () => {
     switch (state.activeTab) {
@@ -638,14 +788,20 @@ function App() {
     <div className="fgp-popup">
       <div className="fgp-header">
         <div className="fgp-logo">
-          <Users size={24} />
+          <Users size={24} aria-hidden="true" />
           <span>Free Group Poster</span>
         </div>
         <div className="fgp-version">v1.0.0</div>
       </div>
       <TabBar activeTab={state.activeTab} setActiveTab={setActiveTab} />
-      <div className="fgp-content">
-        {state.loading ? <div className="fgp-loading">Loading...</div> : renderTab()}
+      <div className="fgp-content" role="main">
+        {state.loading ? (
+          <div className="fgp-loading" role="status" aria-live="polite">
+            Loading...
+          </div>
+        ) : (
+          renderTab()
+        )}
       </div>
     </div>
   );

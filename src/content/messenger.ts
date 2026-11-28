@@ -88,9 +88,12 @@ interface UserSettings {
 async function getUserSettings(): Promise<UserSettings> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_USER_SETTINGS' }, response => {
-      resolve(
-        response || { showShareButton: true, shareButtonPosition: 'after_share', theme: 'light' }
-      );
+      resolve({
+        showShareButton: true,
+        shareButtonPosition: 'after_share',
+        theme: 'light',
+        ...(response?.success ? response.data : null),
+      });
     });
   });
 }
@@ -119,7 +122,9 @@ function setupObserver(): void {
 }
 
 function checkForShareButtons(): void {
+  // Check for share buttons on both messenger.com and facebook.com/messages.
   const shareSelectors = [
+    // messenger.com selectors
     '[data-testid="share-button"]',
     '[aria-label*="Share" i]',
     '[aria-label*="share" i]',
@@ -127,6 +132,11 @@ function checkForShareButtons(): void {
     'div[role="button"][aria-label*="Share" i]',
     '[data-testid="share"]',
     '[data-icon="share"]',
+    // facebook.com/messages selectors (newer UI)
+    '[data-testid="composer"] [role="button"][aria-label*="Share"]',
+    '[data-testid="share"]',
+    'div[role="button"]:has-text("Share")',
+    'button[aria-label*="share" i]',
   ];
 
   for (const selector of shareSelectors) {
@@ -275,13 +285,8 @@ function closeShareSheet(): void {
 async function getMessengerGroups(): Promise<Array<{ id: string; name: string }>> {
   return new Promise(resolve => {
     chrome.runtime.sendMessage({ type: 'GET_MESSENGER_GROUPS' }, response => {
-      if (Array.isArray(response)) {
-        resolve(response);
-      } else if (response && typeof response === 'object') {
-        resolve(Object.values(response));
-      } else {
-        resolve([]);
-      }
+      const groups = response?.success ? response.data : null;
+      resolve(Array.isArray(groups) ? groups : []);
     });
   });
 }

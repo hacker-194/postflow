@@ -18,6 +18,8 @@
   --fgp-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   --fgp-radius: 10px;
   --fgp-transition: all 0.2s ease;
+  --fgp-focus-ring: 0 0 0 3px #e7f3ff;
+  --fgp-focus-ring-dark: 0 0 0 3px #1877f2;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,7 +30,32 @@
     --fgp-text: #e4e6eb;
     --fgp-text-secondary: #b0b3b8;
     --fgp-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --fgp-focus-ring: 0 0 0 3px #1877f2;
+    --fgp-focus-ring-dark: 0 0 0 3px #60a5fa;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.fgp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 body {
@@ -87,7 +114,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: none;
   background: transparent;
   color: var(--fgp-text-secondary);
@@ -97,6 +124,7 @@ body {
   cursor: pointer;
   white-space: nowrap;
   transition: var(--fgp-transition);
+  min-height: 44px;
 }
 
 .fgp-tab:hover {
@@ -107,6 +135,17 @@ body {
 .fgp-tab.active {
   background: var(--fgp-primary);
   color: white;
+}
+
+.fgp-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--fgp-focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-tab:focus-visible {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
 }
 
 .fgp-content {
@@ -273,6 +312,57 @@ body {
   color: var(--fgp-text);
 }
 
+/* Focus styles for accessibility */
+.fgp-btn:focus-visible,
+.fgp-btn-icon:focus-visible,
+.fgp-tab:focus-visible,
+.fgp-select:focus-visible,
+.fgp-setting-row select:focus-visible,
+.fgp-setting-row input:focus-visible,
+.fgp-modal-overlay:focus-visible,
+.fgp-modal button:focus-visible,
+.fgp-form-row input:focus-visible,
+.fgp-form-row select:focus-visible,
+.fgp-form-row textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--fgp-focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-btn:focus-visible,
+  .fgp-btn-icon:focus-visible,
+  .fgp-tab:focus-visible,
+  .fgp-select:focus-visible,
+  .fgp-setting-row select:focus-visible,
+  .fgp-setting-row input:focus-visible,
+  .fgp-modal-overlay:focus-visible,
+  .fgp-modal button:focus-visible,
+  .fgp-form-row input:focus-visible,
+  .fgp-form-row select:focus-visible,
+  .fgp-form-row textarea:focus-visible {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
+}
+
+/* Ensure touch targets meet 44px minimum */
+.fgp-btn {
+  min-height: 44px;
+}
+
+.fgp-btn-icon {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.fgp-tab {
+  min-height: 44px;
+}
+
+.fgp-select,
+.fgp-setting-row select {
+  min-height: 44px;
+}
+
 .fgp-empty-state {
   display: flex;
   flex-direction: column;
@@ -372,9 +462,9 @@ body {
 
 .fgp-progress-bar {
   width: 100px;
-  height: 6px;
+  height: 8px;
   background: var(--fgp-border);
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -382,8 +472,14 @@ body {
 .fgp-progress-fill {
   height: 100%;
   background: var(--fgp-primary);
-  border-radius: 3px;
+  border-radius: 4px;
   transition: width 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fgp-progress-fill {
+    transition: none;
+  }
 }
 
 .fgp-scheduled-item.pending {
@@ -461,13 +557,26 @@ body {
 }
 
 .fgp-select {
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--fgp-border);
   border-radius: 8px;
   background: var(--fgp-bg);
   color: var(--fgp-text);
   font-size: 13px;
   cursor: pointer;
+  min-height: 44px;
+}
+
+.fgp-select:focus-visible {
+  outline: none;
+  border-color: var(--fgp-primary);
+  box-shadow: var(--fgp-focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  .fgp-select:focus-visible {
+    box-shadow: var(--fgp-focus-ring-dark);
+  }
 }
 
 .fgp-about {
