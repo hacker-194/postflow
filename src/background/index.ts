@@ -37,9 +37,17 @@ import {
   generateSecureId,
   sanitizeGroupName,
   sanitizeUrl,
+  validateFacebookUrl,
 } from '../shared/security';
 
 const ALARM_NAME = 'fgp-scheduler';
+
+function getLocalDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 logger.info('background', 'Service worker started');
 
@@ -64,7 +72,7 @@ async function initializeDefaults(): Promise<void> {
     await set('userSettings', DEFAULT_USER_SETTINGS);
   }
   await set('dailyPosts', 0);
-  await set('dailyPostsDate', new Date().toISOString().split('T')[0]);
+  await set('dailyPostsDate', getLocalDateKey());
 }
 
 async function setupAlarms(): Promise<void> {
@@ -80,7 +88,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
 });
 
 async function resetDailyCounterIfNeeded(): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateKey();
   const storedDate = await get<string>('dailyPostsDate');
   if (storedDate !== today) {
     await set('dailyPosts', 0);
@@ -112,8 +120,15 @@ async function executeShare(shareId: string): Promise<void> {
 
   try {
     const groups = await getGroupsForList(share.groupListId);
-    const settings = share.settings;
+    const settings = { ...DEFAULT_SHARE_SETTINGS, ...share.settings };
+    const progress = createInitialProgress(share);
+    progress.totalGroups = groups.length;
+    await updateProgress(shareId, progress);
 
+    let completedGroups = progress.completedGroups;
+    let successfulGroups = progress.successfulGroups;
+    let failedGroups = progress.failedGroups;
+    const errors = [...progress.errors];
     let dailyPosts = (await get<number>('dailyPosts')) || 0;
     const maxPerDay = settings.maxPostsPerDay || DEFAULT_SHARE_SETTINGS.maxPostsPerDay;
 
@@ -122,18 +137,14 @@ async function executeShare(shareId: string): Promise<void> {
       if (!group) continue;
 
       if (dailyPosts >= maxPerDay) {
-        await updateProgress(shareId, {
-          errors: [
-            ...(share.progress?.errors || []),
-            {
-              groupId: group.id,
-              groupName: group.name,
-              error: 'Daily post limit reached',
-              timestamp: Date.now(),
-              retryable: false,
-            },
-          ],
+        errors.push({
+          groupId: group.id,
+          groupName: group.name,
+          error: 'Daily post limit reached',
+          timestamp: Date.now(),
+          retryable: false,
         });
+        await updateProgress(shareId, { errors: [...errors] });
         break;
       }
 
@@ -147,25 +158,30 @@ async function executeShare(shareId: string): Promise<void> {
         await shareToGroup(share.postUrl, group, settings, share.postPreview);
         dailyPosts++;
         await set('dailyPosts', dailyPosts);
+        completedGroups++;
+        successfulGroups++;
         await updateProgress(shareId, {
-          completedGroups: (share.progress?.completedGroups || 0) + 1,
-          successfulGroups: (share.progress?.successfulGroups || 0) + 1,
+          completedGroups,
+          successfulGroups,
+          failedGroups,
+          errors: [...errors],
         });
       } catch (error) {
         if (!group) return;
+        completedGroups++;
+        failedGroups++;
+        errors.push({
+          groupId: group.id,
+          groupName: group.name,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: Date.now(),
+          retryable: true,
+        });
         await updateProgress(shareId, {
-          completedGroups: (share.progress?.completedGroups || 0) + 1,
-          failedGroups: (share.progress?.failedGroups || 0) + 1,
-          errors: [
-            ...(share.progress?.errors || []),
-            {
-              groupId: group.id,
-              groupName: group.name,
-              error: error instanceof Error ? error.message : 'Unknown error',
-              timestamp: Date.now(),
-              retryable: true,
-            },
-          ],
+          completedGroups,
+          successfulGroups,
+          failedGroups,
+          errors: [...errors],
         });
       }
 
@@ -175,17 +191,25 @@ async function executeShare(shareId: string): Promise<void> {
       }
     }
 
+    const finalStatus = successfulGroups > 0 ? 'completed' : 'failed';
     await set(
       'scheduledShares',
       {
         ...share,
-        status: 'completed',
+        status: finalStatus,
+        progress: {
+          ...progress,
+          completedGroups,
+          successfulGroups,
+          failedGroups,
+          errors,
+        },
         completedAt: Date.now(),
       },
       shareId
     );
 
-    await notifyUser(shareId, 'completed', groups.length);
+    await notifyUser(shareId, finalStatus, successfulGroups);
   } catch {
     await set(
       'scheduledShares',
@@ -653,7 +677,7 @@ async function clearAllData(): Promise<void> {
   // Re-initialize defaults
   await set('userSettings', DEFAULT_USER_SETTINGS);
   await set('dailyPosts', 0);
-  await set('dailyPostsDate', new Date().toISOString().split('T')[0]);
+  await set('dailyPostsDate', getLocalDateKey());
 }
 
 async function handleScheduleShare(payload: {
@@ -663,13 +687,32 @@ async function handleScheduleShare(payload: {
   settings: ShareSettings;
   scheduledAt: number;
 }): Promise<{ success: boolean; shareId?: string; error?: string }> {
-  const settings = sanitizeSettings(payload.settings);
+  if (
+    !payload ||
+    typeof payload.postUrl !== 'string' ||
+    !validateFacebookUrl(payload.postUrl) ||
+    typeof payload.groupListId !== 'string' ||
+    !validateGroupListId(payload.groupListId) ||
+    !Number.isFinite(payload.scheduledAt) ||
+    !payload.postPreview ||
+    typeof payload.postPreview !== 'object'
+  ) {
+    return { success: false, error: 'Invalid scheduled share details' };
+  }
+
+  const groupList = await get<GroupList>('groupLists', payload.groupListId);
+  if (!groupList) return { success: false, error: 'Group list not found' };
+
+  const settings = { ...DEFAULT_SHARE_SETTINGS, ...sanitizeSettings(payload.settings) };
+  const postUrl = sanitizeUrl(payload.postUrl);
+  if (!postUrl) return { success: false, error: 'Only valid HTTPS Facebook post URLs are supported' };
+
   const shareId = generateSecureId('share');
   const share: ScheduledShare = {
     id: shareId,
-    postUrl: sanitizeUrl(payload.postUrl) || payload.postUrl,
+    postUrl,
     postPreview: payload.postPreview,
-    groupListId: sanitizeGroupName(payload.groupListId),
+    groupListId: payload.groupListId,
     settings,
     scheduledAt: payload.scheduledAt,
     createdAt: Date.now(),
