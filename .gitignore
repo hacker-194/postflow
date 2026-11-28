@@ -34,3 +34,7 @@ coverage/
 wa-live.log
 wa-open.out
 .fb-live-profile/
+.messenger-test*.png
+playwright-report/
+test-results/
+.claude-flow/
